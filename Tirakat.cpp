@@ -60,6 +60,7 @@ const std::filesystem::path data_dir{ "resources/Data" };
 const std::filesystem::path data_txt{ "resources/Data/data.txt" };
 bool zero_data{false};
 Font* font = nullptr;
+bool playing{ true };
 
 int main()
 {
@@ -78,7 +79,7 @@ int main()
     const int screen_h = 675;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    SetConfigFlags(FLAG_MSAA_4X_HINT);
+    //SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(screen_w, screen_h, "Tirakat");
     InitAudioDevice();
     SetTargetFPS(60);
@@ -92,6 +93,9 @@ int main()
 
     Font font_number = LoadFontEx(FONT_LOC_Roboto_Mono, 40, 0, 0);
     SetTextureFilter(font_number.texture, TEXTURE_FILTER_BILINEAR);
+
+    Font font_counter = LoadFontEx(FONT_LOC_Roboto_Mono, 100, 0, 0);
+    SetTextureFilter(font_counter.texture, TEXTURE_FILTER_BILINEAR);
 
     FileCheck(data_txt);
 
@@ -109,6 +113,10 @@ int main()
     }
 
     music = LoadMusicStream(data.at(order).path.c_str());
+    if (IsMusicReady(music)) {
+        SetMusicVolume(music, 0.15F);
+        PlayMusicStream(music);
+    }
 
     while (!WindowShouldClose()) {
         if (zero_data == true) {
@@ -144,11 +152,23 @@ int main()
         else if (p->page == PAGE_MAIN) {
             
             if (IsMusicReady(music)) {
-
-                SetMusicVolume(music, 0.15F);
-                PlayMusicStream(music);
+                SetMusicVolume(music, 0.15F); 
                 UpdateMusicStream(music);
+                if (playing) {
+                    PlayMusicStream(music);
+                }
             }
+
+            if (IsKeyPressed(KEY_SPACE)) {
+                playing = !playing;
+                if (playing == false) {
+                    PauseMusicStream(music);
+                }
+                else {
+                    ResumeMusicStream(music);
+                }
+            }
+
 
             // INFO PANEL
             float panel_info_h = 80.0F;
@@ -171,9 +191,7 @@ int main()
 
             int duration = data.at(order).duration;
             static int progress = 0;
-            //progress = static_cast<int>(1 * GetTime() * 1000);
             progress = static_cast<int>(GetMusicTimePlayed(music) * 1000);
-            //std::cout << progress << std::endl;
             std::ostringstream formatted_duration{};
             std::ostringstream formatted_progress{};
 
@@ -293,8 +311,7 @@ int main()
                         // Music Play Load
                         music = LoadMusicStream(data.at(order).path.c_str());
                         progress = 0;
-                        std::cout << GetMusicTimeLength(music) << std::endl;
-                        
+                        playing = true;
                     }
                 }
                 if (i == order) {
@@ -386,6 +403,23 @@ int main()
                 DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
 
                 EndScissorMode();
+            }
+
+            {
+                font = &font_counter;
+                std::string counter = std::to_string(data.at(order).counter);
+                std::string target = std::to_string(data.at(order).target);
+                std::string cpp_text = counter + " / " + target;
+
+                const char* text = cpp_text.c_str();
+                float font_size = 80.0F;
+                float font_space = 0.0F;
+                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+                Vector2 text_coor{
+                    panel_main.x + (panel_main.width - text_measure.x) / 2,
+                    panel_main.y + (panel_main.height - text_measure.y) / 2 + 20.0F
+                };
+                DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
             }
 
         }
