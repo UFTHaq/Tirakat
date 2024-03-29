@@ -20,14 +20,39 @@ extern "C" {
 #define FONT_LOC_Roboto_Mono {"D:/Coding/Raylib C++/Tirakat/resources/Fonts/Roboto_Mono/static/RobotoMono-SemiBold.ttf"}
 #define FONT_LOC_Source_Sans {"D:/Coding/Raylib C++/Tirakat/resources/Fonts/Source_Sans_3/static/SourceSans3-SemiBold.ttf"}
 
+#define ICON_APP_LOC        {"D:/Coding/Raylib C++/Tirakat/resources/Icons/Tirakat-favicon.png"}
+#define ICON_PLAYPAUSE_LOC  {"D:/Coding/Raylib C++/Tirakat/resources/Icons/PlayPause.png"}
+#define ICON_FULLSCREEN_LOC {"D:/Coding/Raylib C++/Tirakat/resources/Icons/Fullscreen.png"}
+#define ICON_VOLUME_LOC     {"D:/Coding/Raylib C++/Tirakat/resources/Icons/Volume.png"}
+
+#define HUD_TIMER_SECS 1.0F
+#define PANEL_LEFT_WIDTH 325.0F
+#define PANEL_INFO_HEIGHT 70.0F
+#define PANEL_PROGRESS_HEIGHT 15.0F
+
 enum Page {
     PAGE_DRAG_DROP,
     PAGE_MAIN
 };
 
+enum Drag {
+    DRAG_MUSIC_PROGRESS,
+    DRAG_VOLUME,
+    DRAG_RELEASE
+};
+
 struct Plug {
     int page{};
     int play{};
+    int dragging{};
+    bool music_playing{};
+    bool reset_time{};
+    bool icon_pp_index{};
+    bool volume_mute{ false };
+    float last_volume{};
+    size_t icon_fullscreen_index{};
+    bool fullscreen{ false };
+    bool mouse_onscreen{ true };
 };
 
 Plug tirakat{};
@@ -52,7 +77,16 @@ int GetDuration(const char* c_file_path);
 
 void ReloadVector();
 
+void DrawTitleMP3(Rectangle& panel_main);
 
+void DrawCounter(Rectangle& panel_main);
+
+void DrawDuration(Rectangle& panel_duration);
+
+void DrawPlayPause(const Rectangle& play_rect);
+
+
+Vector2 mouse_position{};
 std::vector<Data> data{};
 size_t data_size{};
 size_t order{};
@@ -60,7 +94,18 @@ const std::filesystem::path data_dir{ "resources/Data" };
 const std::filesystem::path data_txt{ "resources/Data/data.txt" };
 bool zero_data{false};
 Font* font = nullptr;
-bool playing{ true };
+
+Texture2D PLAYPAUSE_TEX{};
+Texture2D FULLSCREEN_TEX{};
+Texture2D VOLUME_TEX{};
+
+std::ostringstream formatted_duration{};
+std::ostringstream formatted_progress{};
+
+int music_time{};
+int duration{};
+
+Music music{};
 
 int main()
 {
@@ -78,12 +123,12 @@ int main()
     const int screen_w = 1200;
     const int screen_h = 675;
 
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_ALWAYS_RUN);
     //SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(screen_w, screen_h, "Tirakat");
     InitAudioDevice();
     SetTargetFPS(60);
-    //SetWindowIcon(LoadImage());
+    SetWindowIcon(LoadImage(ICON_APP_LOC));
 
     Font font_m = LoadFontEx(FONT_LOC_Roboto_Slab, 60, 0, 0);
     SetTextureFilter(font_m.texture, TEXTURE_FILTER_BILINEAR);
@@ -97,9 +142,21 @@ int main()
     Font font_counter = LoadFontEx(FONT_LOC_Roboto_Mono, 100, 0, 0);
     SetTextureFilter(font_counter.texture, TEXTURE_FILTER_BILINEAR);
 
+    Image play_pause_icon = LoadImage(ICON_PLAYPAUSE_LOC);
+    PLAYPAUSE_TEX = LoadTextureFromImage(play_pause_icon);
+    SetTextureFilter(PLAYPAUSE_TEX, TEXTURE_FILTER_BILINEAR);
+
+    Image fullscreen_icon = LoadImage(ICON_FULLSCREEN_LOC);
+    FULLSCREEN_TEX = LoadTextureFromImage(fullscreen_icon);
+    SetTextureFilter(FULLSCREEN_TEX, TEXTURE_FILTER_BILINEAR);
+
+    Image volume_icon = LoadImage(ICON_VOLUME_LOC);
+    VOLUME_TEX = LoadTextureFromImage(volume_icon);
+    SetTextureFilter(VOLUME_TEX, TEXTURE_FILTER_BILINEAR);
+
     FileCheck(data_txt);
 
-    Music music{};
+    
 
     
     if (zero_data == true) {
@@ -114,8 +171,10 @@ int main()
 
     music = LoadMusicStream(data.at(order).path.c_str());
     if (IsMusicReady(music)) {
-        SetMusicVolume(music, 0.15F);
-        PlayMusicStream(music);
+        SetMusicVolume(music, 0.05F);
+        p->dragging = DRAG_RELEASE;
+        p->music_playing = true;
+        p->last_volume = GetMasterVolume();
     }
 
     while (!WindowShouldClose()) {
@@ -129,7 +188,7 @@ int main()
         BeginDrawing();
         ClearBackground(BASE_COLOR);
 
-        Vector2 mouse_position = GetMousePosition();
+        mouse_position = GetMousePosition();
 
         float screen_w = static_cast<float>(GetScreenWidth());
         float screen_h = static_cast<float>(GetScreenHeight());
@@ -150,102 +209,152 @@ int main()
             DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
         }
         else if (p->page == PAGE_MAIN) {
+
+            duration = data.at(order).duration;
             
+            if (p->fullscreen) {
+                // TODO: different layouts and add HUD
+                static float hud_timer = HUD_TIMER_SECS;
+
+                Rectangle panel_main = {
+                    0,
+                    0,
+                    screen_w,
+                    screen_h - PANEL_INFO_HEIGHT
+                };
+
+                DrawTitleMP3(panel_main);
+                font = &font_counter;
+                DrawCounter(panel_main);
+
+
+                if (hud_timer > 0.0F) {
+
+                }
+                Rectangle panel_bottom{
+                    0, 
+                    screen_h - PANEL_INFO_HEIGHT,
+                    screen_w,
+                    PANEL_INFO_HEIGHT
+                };
+
+                Rectangle panel_info{
+                    panel_bottom.x,
+                    panel_bottom.y,
+                    panel_bottom.width,
+                    PANEL_INFO_HEIGHT - PANEL_PROGRESS_HEIGHT
+                };
+
+                Rectangle panel_duration{
+                    panel_info.x,
+                    panel_info.y,
+                    PANEL_LEFT_WIDTH,
+                    panel_info.height
+                };
+                DrawRectangleRec(panel_duration, BLACK);
+                font = &font_number;
+                DrawDuration(panel_duration);
+
+                float pad = 12.0F;
+                float button_w = panel_info.height;
+                Rectangle play_base_panel = {
+                    panel_duration.width,
+                    panel_info.y,
+                    button_w,
+                    button_w
+                };
+                Rectangle play_rect{
+                    play_base_panel.x + (pad * 1),
+                    play_base_panel.y + (pad * 1),
+                    play_base_panel.width - (pad * 2),
+                    play_base_panel.height - (pad * 2),
+                };
+                DrawPlayPause(play_rect);
+            }
+            else {
+
+            }
+            
+            // INPUT KEYBOARD & MOUSE
+            if (IsKeyPressed(KEY_SPACE)) {
+                p->music_playing = !p->music_playing;
+            }
+
+            //
+
             if (IsMusicReady(music)) {
-                SetMusicVolume(music, 0.15F); 
+                SetMusicVolume(music, 0.05F); 
                 UpdateMusicStream(music);
-                if (playing) {
+
+                if (p->music_playing) {
                     PlayMusicStream(music);
                 }
-            }
+            } 
 
-            if (IsKeyPressed(KEY_SPACE)) {
-                playing = !playing;
-                if (playing == false) {
-                    PauseMusicStream(music);
-                }
-                else {
-                    ResumeMusicStream(music);
+            static bool need_resume = false;
+            if (p->music_playing) {
+                p->icon_pp_index = true;
+
+                if (need_resume) {
+                    ResumeMusicStream(music); // Perhaps need to make condition toggle for resume only once after pause
+                    need_resume = false;
                 }
             }
-
+            else {
+                p->icon_pp_index = false;
+                PauseMusicStream(music);
+                need_resume = true;
+            }
 
             // INFO PANEL
-            float panel_info_h = 80.0F;
-            float panel_progress_h = 15.0F;
-            Rectangle panel_info{
+            float panel_info_h = PANEL_INFO_HEIGHT;
+            float panel_progress_h = PANEL_PROGRESS_HEIGHT;
+            Rectangle panel_info_base{
                 0,
                 screen_h - panel_info_h,
                 screen_w,
                 panel_info_h - panel_progress_h
             };
+
+            float offset_y = 4.0F;
+            Rectangle panel_info{
+                panel_info_base.x,
+                panel_info_base.y + offset_y,
+                panel_info_base.width,
+                panel_info_base.height - offset_y
+            };
             DrawRectangleRec(panel_info, PANEL_COLOR);
 
-            float panel_w = 300.0F;
-            Rectangle duration_rect{
+            float panel_w = PANEL_LEFT_WIDTH;
+            Rectangle panel_duration{
                 panel_info.x,
                 panel_info.y,
                 panel_w,
                 panel_info.height
             };
 
-            int duration = data.at(order).duration;
-            static int progress = 0;
-            progress = static_cast<int>(GetMusicTimePlayed(music) * 1000);
-            std::ostringstream formatted_duration{};
-            std::ostringstream formatted_progress{};
-
-            if (duration < 3600) {
-                int minutes_dur = duration / (60 * 1000);
-                int seconds_dur = (duration / 1000) % 60;
-
-                int minutes_pro = progress / (60 * 1000);
-                int seconds_pro = (progress / 1000) % 60;
-
-                formatted_duration << std::setw(2) << std::setfill('0') << minutes_dur << ":" << std::setw(2) << std::setfill('0') << seconds_dur;
-                formatted_progress << std::setw(2) << std::setfill('0') << minutes_pro << ":" << std::setw(2) << std::setfill('0') << seconds_pro;
-            }
-            else {
-                int hour_dur = duration / (3600 * 1000);
-                int minutes_dur = (duration / (60 * 1000)) % 60;
-                int seconds_dur = (duration / 1000) % 60;
-
-                int hour_pro = progress / (3600 * 1000);
-                int minutes_pro = (progress / (60 * 1000)) % 60;
-                int seconds_pro = (progress / 1000) % 60;
-
-                formatted_duration << std::setw(2) << std::setfill('0') << hour_dur << ":" 
-                                   << std::setw(2) << std::setfill('0') << minutes_dur << ":" 
-                                   << std::setw(2) << std::setfill('0') << seconds_dur;
-
-                formatted_progress << std::setw(2) << std::setfill('0') << hour_pro << ":" 
-                                   << std::setw(2) << std::setfill('0') << minutes_pro << ":" 
-                                   << std::setw(2) << std::setfill('0') << seconds_pro;
+            if (p->reset_time == true) {
+                SeekMusicStream(music, 0.1F);
+                p->reset_time = false;
+                p->music_playing = true;
             }
 
-            {
-                std::string duration_string = formatted_duration.str();
-                std::string progress_string = formatted_progress.str();
-
-                std::string cpp_text = progress_string + " / " + duration_string;
-                font = &font_number;
-                float font_size = duration_rect.height * 0.45F;
-                float font_space = 0.5F;
-                const char* text = cpp_text.c_str();
-                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-                Vector2 text_coor{
-                    duration_rect.x + (duration_rect.width - text_measure.x) / 2,
-                    duration_rect.y + (duration_rect.height - text_measure.y) / 2
-                };
-                DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
+            //music_time = 0;
+            if (p->dragging == DRAG_RELEASE) {
+                music_time = static_cast<int>(GetMusicTimePlayed(music) * 1000);
             }
+
+            // DURATION PANEL
+            font = &font_number;
+            DrawDuration(panel_duration);
+
 
             // LEFT PANEL
             Rectangle panel_left{
                 0,
                 0,
                 panel_w,
-                panel_info.y
+                panel_info_base.y
             };
             DrawRectangleRec(panel_left, PANEL_COLOR);
             // VERTICAL LINE
@@ -260,7 +369,7 @@ int main()
             // HORIZONTAL LINE
             Rectangle panel_info_line{
                 0,
-                panel_info.y,
+                panel_info_base.y,
                 screen_w,
                 line_width
             };
@@ -273,7 +382,7 @@ int main()
                 panel_left.width * 0.925F,
                 panel_left.height
             };
-            //DrawRectangleRec(inner_panel_left, GRAY);
+            //DrawRectangleRec(inner_panel_left_boundary, GRAY);
 
             static float content_scroll = 0;
 
@@ -286,6 +395,7 @@ int main()
                 content_h
             };
 
+
             BeginScissorMode(
                 static_cast<int>(inner_panel_left_boundary.x),
                 static_cast<int>(inner_panel_left_boundary.y),
@@ -297,32 +407,35 @@ int main()
                 Rectangle content{
                     content_boundary.x + (content_panel_pad * 2),
                     content_boundary.y + (content_panel_pad * 2) + (i * content_h),
-                    content_boundary.width - (content_panel_pad * 3),
+                    content_boundary.width - (content_panel_pad * 2),
                     content_boundary.height - (content_panel_pad * 2)
                 };
                 //DrawRectangleRec(content, GRAY);
                 Color color_content = CONTENT_COLOR;
                 Color color_font = RAYWHITE;
-                if (CheckCollisionPointRec(mouse_position, content)) {
-                    color_content = DARKGRAY;
+                if (CheckCollisionPointRec(mouse_position, inner_panel_left_boundary)) {
 
-                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                        order = i;
-                        // Music Play Load
-                        music = LoadMusicStream(data.at(order).path.c_str());
-                        progress = 0;
-                        playing = true;
+                    if (CheckCollisionPointRec(mouse_position, content)) {
+                        color_content = DARKGRAY;
+
+                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                            order = i;
+                            // Music Play Load
+                            music = LoadMusicStream(data.at(order).path.c_str());
+                            p->reset_time = true;
+                        }
                     }
                 }
                 if (i == order) {
                     color_content = CONTENT_CHOOSE_COLOR;
                     color_font = BLACK;
                 }
+
                 DrawRectangleRounded(content, 0.2F, 10, color_content);
 
                 font = &font_s;
                 float text_width_limit = content.width - 30.0F;
-                float font_size = content_h * 0.45F;
+                float font_size = content_h * 0.475F;
                 float font_space = -0.25F;
                 float text_width = 0.0F;
                 int max_chars = 0;
@@ -337,7 +450,7 @@ int main()
                 const char* text = first_10.c_str();
                 Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
                 Vector2 text_coor = {
-                    content.x + 10.0F,
+                    content.x + 12.0F,
                     content.y + (content.height - text_measure.y) / 2,
                 };
                 DrawTextEx(*font, text, text_coor, font_size, font_space, color_font);
@@ -345,6 +458,177 @@ int main()
             }
 
             EndScissorMode();
+
+
+            // MULTIMEDIA PANEL
+            {
+                // PLAY BUTTON
+                float button_w = panel_info.height;
+                float pad = 8.0F;
+                //float offset_y = 2.0F;
+                Rectangle play_base_panel = {
+                    panel_left.width,
+                    panel_info.y,
+                    button_w,
+                    button_w
+                };
+                Rectangle play_rect{
+                    play_base_panel.x + (pad * 1),
+                    play_base_panel.y + (pad * 1),
+                    play_base_panel.width - (pad * 2),
+                    play_base_panel.height - (pad * 2),
+                };
+                //DrawRectangleRec(play_rect, RED);
+                DrawPlayPause(play_rect);
+
+                // VOLUME BUTTON
+                pad = 10.0F;
+                Rectangle volume_base_panel = {
+                    panel_left.width + (button_w),
+                    play_base_panel.y,
+                    button_w,
+                    button_w
+                };
+                Rectangle volume_rect{
+                    volume_base_panel.x + (pad * 1),
+                    volume_base_panel.y + (pad * 1),
+                    volume_base_panel.width - (pad * 2),
+                    volume_base_panel.height - (pad * 2),
+                };
+                //DrawRectangleRec(volume_rect, RED);
+
+                Color icon_color = LIGHTGRAY;
+                if (CheckCollisionPointRec(mouse_position, volume_rect)) {
+                    icon_color = WHITE;
+                    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                        p->volume_mute = !p->volume_mute;
+                    }
+                }
+                else {
+                    icon_color = LIGHTGRAY;
+                }
+
+                static size_t icon_index = 0;
+                if (p->volume_mute) {
+                    icon_index = 0;
+                    SetMasterVolume(0.0F);
+                }
+                else {
+                    SetMasterVolume(p->last_volume);
+                    p->last_volume = GetMasterVolume();
+
+                    if (p->last_volume < 0.5F) {
+                        icon_index = 1;
+                    }
+                    else {
+                        icon_index = 2;
+                    }
+                }
+
+                float icon_size = 100.0F;
+                {
+                    Rectangle dest = volume_rect;
+                    Rectangle source{ icon_index * icon_size, 0, icon_size, icon_size };
+                    DrawTexturePro(VOLUME_TEX, source, dest, { 0,0 }, 0, icon_color);
+                }
+
+                // VOLUME SLIDER
+                static float hud_volume = 0;
+                if (CheckCollisionPointRec(mouse_position, volume_rect)) {
+                    hud_volume = HUD_TIMER_SECS;
+                }
+
+                if (hud_volume > 0.0F) {
+                    hud_volume -= GetFrameTime();
+
+                    float volume_slider_length_base = 230.F;
+                    Rectangle volume_slider_base_panel{
+                        volume_base_panel.x + volume_base_panel.width,
+                        volume_base_panel.y,
+                        volume_slider_length_base,
+                        button_w
+                    };
+                    //DrawRectangleRec(volume_slider_base_panel, DARKGRAY);
+
+                    float volume_slider_length = 200.F;
+                    float volume_slider_h = button_w * 0.25F;
+                    Rectangle volume_slider_outer{
+                        volume_slider_base_panel.x + 15,
+                        volume_slider_base_panel.y + (volume_slider_base_panel.height - volume_slider_h) / 2,
+                        volume_slider_length,
+                        volume_slider_h
+                    };
+                    DrawRectangleRounded(volume_slider_outer, 0.7F, 5, BASE_COLOR);
+
+                    float vol_pad = 3.0F;
+                    float vol_ratio = volume_slider_outer.width / 1;
+                    float vol_length = vol_ratio * GetMasterVolume();
+                    Rectangle volume_slider_inner{
+                        volume_slider_outer.x + (vol_pad * 1),
+                        volume_slider_outer.y + (vol_pad * 1),
+                        vol_length - (vol_pad * 2),
+                        volume_slider_outer.height - (vol_pad * 2),
+                    };
+                    DrawRectangleRounded(volume_slider_inner, 0.7F, 5, LIGHTGRAY);
+
+                    if (CheckCollisionPointRec(mouse_position, volume_slider_base_panel)) {
+                        hud_volume = HUD_TIMER_SECS;
+                    }
+
+                }
+
+
+                // FULLSCREEN BUTTON
+                pad = 7.0F;
+                Rectangle fullscreen_base_panel{
+                    panel_info.width - button_w,
+                    play_base_panel.y,
+                    button_w,
+                    button_w
+                };
+                Rectangle fullscreen_rect{
+                    fullscreen_base_panel.x + (pad * 1),
+                    fullscreen_base_panel.y + (pad * 1),
+                    fullscreen_base_panel.width - (pad * 2),
+                    fullscreen_base_panel.height - (pad * 2),
+                };
+                //DrawRectangleRec(fullscreen_rect, RED);
+
+                if (p->fullscreen == false) {
+                    if (CheckCollisionPointRec(mouse_position, fullscreen_rect)) {
+                        p->icon_fullscreen_index = 1;
+                        icon_color = WHITE;
+                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                            p->fullscreen = true;
+                        }
+                    }
+                    else {
+                        p->icon_fullscreen_index = 0;
+                        icon_color = LIGHTGRAY;
+                    }
+                }
+                else {
+                    if (CheckCollisionPointRec(mouse_position, fullscreen_rect)) {
+                        p->icon_fullscreen_index = 3;
+                        icon_color = WHITE;
+                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                            p->fullscreen = false;
+                        }
+                    }
+                    else {
+                        p->icon_fullscreen_index = 2;
+                        icon_color = LIGHTGRAY;
+                    }
+                }
+
+                {
+                    float icon_size = 100.0F;
+                    Rectangle dest = fullscreen_rect;
+                    Rectangle source{ p->icon_fullscreen_index * icon_size, 0, icon_size, icon_size };
+                    DrawTexturePro(FULLSCREEN_TEX, source, dest, { 0,0 }, 0, icon_color);
+                }
+                
+            }
 
             // PROGRESS PANEL
             Rectangle panel_progress{
@@ -356,7 +640,11 @@ int main()
             DrawRectangleRec(panel_progress, PANEL_PROGRESS_BASE_COLOR);
 
             float progress_ratio = static_cast<float>(screen_w) / duration;
-            float progress_w = progress_ratio * progress;
+            static float progress_w = 0;
+            if (p->dragging != DRAG_MUSIC_PROGRESS) {
+                progress_w = progress_ratio * music_time;
+            }
+            
             Rectangle progress_bar{
                 panel_progress.x,
                 panel_progress.y,
@@ -365,19 +653,50 @@ int main()
             };
             DrawRectangleRec(progress_bar, PANEL_PROGRESS_COLOR);
 
+            static bool dragging_progress = false;
             if (CheckCollisionPointRec(mouse_position, panel_progress)) {
-                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                     float t = (mouse_position.x - panel_progress.x) / panel_progress.width;
-                    SeekMusicStream(music, t * (duration / 1000));
+                    SeekMusicStream(music, (t * duration / 1000));
+                } 
+                else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                    p->dragging = DRAG_MUSIC_PROGRESS;
                 }
             }
+
+            if (p->dragging == DRAG_MUSIC_PROGRESS && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                p->music_playing = false;
+                progress_w = mouse_position.x;
+                music_time = static_cast<int>(progress_w / progress_ratio);
+
+                if (music_time < 0) {
+                    music_time = 0;
+                }
+                else if (music_time > duration) {
+                    music_time = duration;
+                }
+            }
+            else if (p->dragging == DRAG_MUSIC_PROGRESS && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                p->dragging = DRAG_RELEASE;
+                p->music_playing = true;
+
+                float t = (mouse_position.x - panel_progress.x) / panel_progress.width;
+                if (mouse_position.x < 0) {
+                    t = (1 - panel_progress.x) / panel_progress.width;
+                }
+                else if (mouse_position.x > screen_w) {
+                    t = (1 + screen_w - panel_progress.x) / panel_progress.width;
+                }
+                SeekMusicStream(music, (t * duration / 1000));
+            }
+
 
             // MAIN PANEL
             Rectangle panel_main{
                 panel_left.x + panel_left.width,
                 0,
                 screen_w - panel_left.width,
-                screen_h - panel_info.height - panel_progress.height
+                screen_h - panel_info_base.height - panel_progress.height
             };
             //DrawRectangleRec(panel_main, BLACK);
             float padding = 20.0F;
@@ -390,37 +709,14 @@ int main()
                      static_cast<int>(panel_main.height - (padding * 2))
                 );
 
+                    DrawTitleMP3(panel_main);
 
-                std::string cpp_text = data.at(order).name;
-                const char* text = cpp_text.c_str();
-                float font_size = 32.0F;
-                float font_space = 0.0F;
-                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-                Vector2 text_coor{
-                    panel_main.x + (panel_main.width - text_measure.x) / 2,
-                    panel_main.y + (40.0F)
-                };
-                DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
+                    font = &font_counter;
+                    DrawCounter(panel_main);
 
                 EndScissorMode();
             }
 
-            {
-                font = &font_counter;
-                std::string counter = std::to_string(data.at(order).counter);
-                std::string target = std::to_string(data.at(order).target);
-                std::string cpp_text = counter + " / " + target;
-
-                const char* text = cpp_text.c_str();
-                float font_size = 80.0F;
-                float font_space = 0.0F;
-                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-                Vector2 text_coor{
-                    panel_main.x + (panel_main.width - text_measure.x) / 2,
-                    panel_main.y + (panel_main.height - text_measure.y) / 2 + 20.0F
-                };
-                DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
-            }
 
         }
 
@@ -475,6 +771,109 @@ int main()
         EndDrawing();
     }
     CloseWindow();
+}
+
+void DrawPlayPause(const Rectangle& play_rect)
+{
+    Color icon_color = LIGHTGRAY;
+    if (CheckCollisionPointRec(mouse_position, play_rect)) {
+        icon_color = WHITE;
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            p->music_playing = !p->music_playing;
+        }
+    }
+    else {
+        icon_color = LIGHTGRAY;
+    }
+
+    //size_t icon_index = 0;
+    float icon_size = 100.0F;
+    {
+        Rectangle dest = play_rect;
+        Rectangle source{ p->icon_pp_index * icon_size, 0, icon_size, icon_size };
+        DrawTexturePro(PLAYPAUSE_TEX, source, dest, { 0,0 }, 0, icon_color);
+    }
+}
+
+void DrawDuration(Rectangle& panel_duration)
+{
+    // RE-CLEAR OSTRINGSTREAMS
+    formatted_duration.str("");
+    formatted_progress.str("");
+
+    if (duration < 3600 * 1000) {
+        int minutes_dur = duration / (60 * 1000);
+        int seconds_dur = (duration / 1000) % 60;
+
+        int minutes_pro = music_time / (60 * 1000);
+        int seconds_pro = (music_time / 1000) % 60;
+
+        formatted_duration << std::setw(2) << std::setfill('0') << minutes_dur << ":" << std::setw(2) << std::setfill('0') << seconds_dur;
+        formatted_progress << std::setw(2) << std::setfill('0') << minutes_pro << ":" << std::setw(2) << std::setfill('0') << seconds_pro;
+    }
+    else {
+        int hour_dur = duration / (3600 * 1000);
+        int minutes_dur = (duration / (60 * 1000)) % 60;
+        int seconds_dur = (duration / 1000) % 60;
+
+        int hour_pro = music_time / (3600 * 1000);
+        int minutes_pro = (music_time / (60 * 1000)) % 60;
+        int seconds_pro = (music_time / 1000) % 60;
+
+        formatted_duration << std::setw(2) << std::setfill('0') << hour_dur << ":"
+            << std::setw(2) << std::setfill('0') << minutes_dur << ":"
+            << std::setw(2) << std::setfill('0') << seconds_dur;
+
+        formatted_progress << std::setw(2) << std::setfill('0') << hour_pro << ":"
+            << std::setw(2) << std::setfill('0') << minutes_pro << ":"
+            << std::setw(2) << std::setfill('0') << seconds_pro;
+    }
+
+    std::string duration_string = formatted_duration.str();
+    std::string progress_string = formatted_progress.str();
+
+    std::string cpp_text = progress_string + " / " + duration_string;
+    float font_size = panel_duration.height * 0.55F;
+    float font_space = 0.5F;
+    const char* text = cpp_text.c_str();
+    Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+    Vector2 text_coor{
+        panel_duration.x + (panel_duration.width - text_measure.x) / 2,
+        panel_duration.y + (panel_duration.height - text_measure.y) / 2
+    };
+    DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
+
+}
+
+void DrawCounter(Rectangle& panel_main)
+{
+    std::string counter = std::to_string(data.at(order).counter);
+    std::string target = std::to_string(data.at(order).target);
+    std::string cpp_text = counter + " / " + target;
+
+    const char* text = cpp_text.c_str();
+    float font_size = 80.0F;
+    float font_space = 0.0F;
+    Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+    Vector2 text_coor{
+        panel_main.x + (panel_main.width - text_measure.x) / 2,
+        panel_main.y + (panel_main.height - text_measure.y) / 2 + 20.0F
+    };
+    DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
+}
+
+void DrawTitleMP3(Rectangle& panel_main)
+{
+    std::string cpp_text = data.at(order).name;
+    const char* text = cpp_text.c_str();
+    float font_size = 32.0F;
+    float font_space = 0.0F;
+    Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+    Vector2 text_coor{
+        panel_main.x + (panel_main.width - text_measure.x) / 2,
+        panel_main.y + (40.0F)
+    };
+    DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
 }
 
 void ReloadVector()
