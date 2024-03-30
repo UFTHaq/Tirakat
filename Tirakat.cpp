@@ -41,6 +41,11 @@ enum Drag {
     DRAG_RELEASE
 };
 
+enum Toggle {
+    OFF,
+    ON
+};
+
 struct Plug {
     int page{};
     int play{};
@@ -83,7 +88,7 @@ void DrawCounter(Rectangle& panel_main);
 
 void DrawDuration(Rectangle& panel_duration);
 
-void DrawPlayPause(const Rectangle& play_rect);
+void DrawPlayPause(const Rectangle& play_rect, const Rectangle& hover_panel);
 
 
 Vector2 mouse_position{};
@@ -269,7 +274,7 @@ int main()
                     play_base_panel.width - (pad * 2),
                     play_base_panel.height - (pad * 2),
                 };
-                DrawPlayPause(play_rect);
+                DrawPlayPause(play_rect, play_base_panel);
             }
             else {
 
@@ -340,7 +345,7 @@ int main()
             }
 
             //music_time = 0;
-            if (p->dragging == DRAG_RELEASE) {
+            if (p->dragging != DRAG_MUSIC_PROGRESS) {
                 music_time = static_cast<int>(GetMusicTimePlayed(music) * 1000);
             }
 
@@ -466,46 +471,71 @@ int main()
                 float button_w = panel_info.height;
                 float pad = 8.0F;
                 //float offset_y = 2.0F;
-                Rectangle play_base_panel = {
+                Rectangle play_panel = {
                     panel_left.width,
                     panel_info.y,
                     button_w,
                     button_w
                 };
                 Rectangle play_rect{
-                    play_base_panel.x + (pad * 1),
-                    play_base_panel.y + (pad * 1),
-                    play_base_panel.width - (pad * 2),
-                    play_base_panel.height - (pad * 2),
+                    play_panel.x + (pad * 1),
+                    play_panel.y + (pad * 1),
+                    play_panel.width - (pad * 2),
+                    play_panel.height - (pad * 2),
                 };
                 //DrawRectangleRec(play_rect, RED);
-                DrawPlayPause(play_rect);
+                DrawPlayPause(play_rect, play_panel);
 
                 // VOLUME BUTTON
-                pad = 10.0F;
+                static bool HUD_toggle = false;
+                float volume_slider_length_base = 230.F;
                 Rectangle volume_base_panel = {
-                    panel_left.width + (button_w),
-                    play_base_panel.y,
+                    panel_left.width + button_w,
+                    play_panel.y,
+                    button_w + volume_slider_length_base ,
+                    button_w
+                };
+                //DrawRectangleRec(volume_base_panel, DARKGRAY);
+
+                Rectangle volume_panel{
+                    volume_base_panel.x,
+                    volume_base_panel.y,
                     button_w,
                     button_w
                 };
-                Rectangle volume_rect{
+                //DrawRectangleRec(volume_panel, DARKBLUE);
+
+                pad = 8.0F;
+                Rectangle volume_icon_rect{
                     volume_base_panel.x + (pad * 1),
                     volume_base_panel.y + (pad * 1),
-                    volume_base_panel.width - (pad * 2),
-                    volume_base_panel.height - (pad * 2),
+                    button_w - (pad * 2),
+                    button_w - (pad * 2),
                 };
-                //DrawRectangleRec(volume_rect, RED);
+                //DrawRectangleRec(volume_icon_rect, RED);
 
                 Color icon_color = LIGHTGRAY;
-                if (CheckCollisionPointRec(mouse_position, volume_rect)) {
+                float volume = GetMasterVolume();
+                if (CheckCollisionPointRec(mouse_position, volume_panel)) {
                     icon_color = WHITE;
-                    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                        p->volume_mute = !p->volume_mute;
+                    HUD_toggle = true;
+                    if (CheckCollisionPointRec(mouse_position, volume_panel) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                        if (volume > 0) {
+                            p->last_volume = volume;
+                            volume = 0;
+                        }
+                        else {
+                            volume = p->last_volume;
+                        }
+                        SetMasterVolume(volume);
+                        //p->volume_mute = !p->volume_mute;
                     }
+
+
                 }
                 else {
                     icon_color = LIGHTGRAY;
+
                 }
 
                 static size_t icon_index = 0;
@@ -514,10 +544,15 @@ int main()
                     SetMasterVolume(0.0F);
                 }
                 else {
-                    SetMasterVolume(p->last_volume);
-                    p->last_volume = GetMasterVolume();
+                    //SetMasterVolume(p->last_volume);
+                    //volume = GetMasterVolume();
+                    //p->last_volume = volume;
 
-                    if (p->last_volume < 0.5F) {
+                    if (volume == 0.0F) {
+                        p->volume_mute;
+                        icon_index = 0;
+                    }
+                    else if (volume < 0.5F) {
                         icon_index = 1;
                     }
                     else {
@@ -527,70 +562,260 @@ int main()
 
                 float icon_size = 100.0F;
                 {
-                    Rectangle dest = volume_rect;
+                    Rectangle dest = volume_icon_rect;
                     Rectangle source{ icon_index * icon_size, 0, icon_size, icon_size };
                     DrawTexturePro(VOLUME_TEX, source, dest, { 0,0 }, 0, icon_color);
                 }
 
-                // VOLUME SLIDER
-                static float hud_volume = 0;
-                if (CheckCollisionPointRec(mouse_position, volume_rect)) {
-                    hud_volume = HUD_TIMER_SECS;
-                }
-
-                if (hud_volume > 0.0F) {
-                    hud_volume -= GetFrameTime();
-
-                    float volume_slider_length_base = 230.F;
-                    Rectangle volume_slider_base_panel{
-                        volume_base_panel.x + volume_base_panel.width,
-                        volume_base_panel.y,
+                // VOLUME SLIDER 2.0
+                static bool drag_volume = false;
+                if (HUD_toggle) {
+                    // make new rect
+                    Rectangle volume_slider_panel{
+                        volume_panel.x + volume_panel.width,
+                        volume_panel.y,
                         volume_slider_length_base,
-                        button_w
+                        volume_panel.height
                     };
-                    //DrawRectangleRec(volume_slider_base_panel, DARKGRAY);
+                    //DrawRectangleRec(volume_slider_panel, DARKBROWN);
 
-                    float volume_slider_length = 200.F;
-                    float volume_slider_h = button_w * 0.25F;
+                    // SLIDER DRAW - START
+                    float volume_slider_w = 200.F;
+                    float volume_slider_h = button_w * 0.15F;
+                    float vol_ratio = volume_slider_w / 1;
+                    float vol_length = vol_ratio * GetMasterVolume();
+
+                    // OUTLINE SLIDER
                     Rectangle volume_slider_outer{
-                        volume_slider_base_panel.x + 15,
-                        volume_slider_base_panel.y + (volume_slider_base_panel.height - volume_slider_h) / 2,
-                        volume_slider_length,
+                        volume_slider_panel.x + 15,
+                        volume_slider_panel.y + (volume_slider_panel.height - volume_slider_h) / 2,
+                        volume_slider_w,
                         volume_slider_h
                     };
                     DrawRectangleRounded(volume_slider_outer, 0.7F, 5, BASE_COLOR);
+                    DrawRectangleRoundedLines(volume_slider_outer, 0.7F, 5, 3.0F, BASE_COLOR);
 
-                    float vol_pad = 3.0F;
-                    float vol_ratio = volume_slider_outer.width / 1;
-                    float vol_length = vol_ratio * GetMasterVolume();
-                    Rectangle volume_slider_inner{
-                        volume_slider_outer.x + (vol_pad * 1),
-                        volume_slider_outer.y + (vol_pad * 1),
-                        vol_length - (vol_pad * 2),
-                        volume_slider_outer.height - (vol_pad * 2),
+                    Rectangle volume_slider{
+                        volume_slider_panel.x + 15,
+                        volume_slider_panel.y + (volume_slider_panel.height - volume_slider_h) / 2,
+                        vol_length,
+                        volume_slider_h
                     };
-                    DrawRectangleRounded(volume_slider_inner, 0.7F, 5, LIGHTGRAY);
+                    DrawRectangleRounded(volume_slider, 0.7F, 5, GRAY);
+                    // SLIDER DRAW - END
 
-                    if (CheckCollisionPointRec(mouse_position, volume_slider_base_panel)) {
-                        hud_volume = HUD_TIMER_SECS;
+
+                    // DRAG
+                    bool inSlider = (CheckCollisionPointRec(mouse_position, volume_slider_panel));
+                    if (inSlider) {
+                        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                            vol_length = mouse_position.x - volume_slider.x;
+                            if (vol_length < 0) vol_length = 0;
+                            if (vol_length > 200) vol_length = 200;
+                            volume = vol_length / vol_ratio;
+                            SetMasterVolume(volume);
+
+                            std::cout << vol_length << " : " << volume << std::endl;
+
+                        }
+                        else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                            if (p->dragging != DRAG_MUSIC_PROGRESS) {
+                                //drag_volume = true;
+                                p->dragging = DRAG_VOLUME;
+                            }
+                        }
                     }
+
+                    //if (drag_volume) {
+                    if (p->dragging == DRAG_VOLUME) {
+                        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                            vol_length = mouse_position.x - volume_slider.x;
+                            if (vol_length < 0) vol_length = 0;
+                            if (vol_length > 200) vol_length = 200;
+                            volume = vol_length / vol_ratio;
+                            SetMasterVolume(volume);
+                    
+                            std::cout << vol_length << " : " << volume << std::endl;
+                        }
+                        else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                            //drag_volume = false;
+                            p->dragging = DRAG_RELEASE;
+                        }
+                    }
+
+                    // MOUSE WHEEL INPUT
+                    float mouse_wheel_step = 0.05F;
+                    float wheel_delta = GetMouseWheelMove();
+                    volume += wheel_delta * mouse_wheel_step;
+                    if (volume < 0) volume = 0;
+                    if (volume > 1) volume = 1;
+                    
+                    SetMasterVolume(volume);
+
+                    // BUG [01] ADA BUG DI SLIDER YANG MANA JIKA DI SET DENGAN DIKLIK AKAN MEMBUAT DIA TIDAK BISA DI MUTE UNMUTE DENGAN TOMBOL ICON
+                    // JIKA DI SET DENGAN DOWN SAMPAI OUT AKAN MEMBUAT DIA BISA DI MUTE UNMUTE DENGAN TOMBOL DENGAN MEMPERTAHANKAN NILAI VOLUME
+
+                    //if (drag_volume == true && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                    //    vol_length = mouse_position.x - volume_slider.x;
+                    //    if (vol_length < 0) vol_length = 0;
+                    //    if (vol_length > 200) vol_length = 200;
+                    //    volume = vol_length / vol_ratio;
+                    //    SetMasterVolume(volume);
+                    //
+                    //    std::cout << vol_length << " : " << volume << std::endl;
+                    //}
+                    //else if (drag_volume == true && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                    //    drag_volume = false;
+                    //}
+
 
                 }
 
+                // OUTSIDE OF HUD
+                bool outVolumeBase = !(CheckCollisionPointRec(mouse_position, volume_base_panel));
+                if (outVolumeBase) {
+                    HUD_toggle = false;
+                    //p->dragging = DRAG_RELEASE;
+                    //drag_volume = false;
+                }
+
+                //if (drag_volume) {
+                if (p->dragging == DRAG_VOLUME) {
+                    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && outVolumeBase) {
+                        HUD_toggle = true;
+                    }
+                    else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && outVolumeBase) {
+                        HUD_toggle = false;
+                        //drag_volume = false;  // BELUM TAU MEMLIKI EFEK ATAU TIDAK. CHECK LAGI
+                        p->dragging = DRAG_RELEASE;
+                    }
+                }
+
+                
+
+                //
+
+                // VOLUME SLIDER
+                //float volume_slider_length_base = 230.F;
+                //static bool volume_expanded =false;
+                //static bool HUD_volume = false;
+                //volume_expanded = (CheckCollisionPointRec(mouse_position, volume_base_panel));
+
+                //if (p->dragging != DRAG_MUSIC_PROGRESS) {
+                //
+                //    if (volume_expanded || HUD_volume) {
+                //        std::cout << "volume_expanded: " << volume_expanded << std::endl;
+                //        //HUD_volume = true;
+                //        volume_base_panel.width = button_w + volume_slider_length_base;
+                //
+                //        Rectangle volume_slider_base_panel{
+                //            volume_base_panel.x + volume_base_panel.width - volume_slider_length_base,
+                //            volume_base_panel.y,
+                //            volume_slider_length_base,
+                //            button_w
+                //        };
+                //        //DrawRectangleRec(volume_slider_base_panel, DARKGRAY);
+                //        DrawRectangleRec(volume_base_panel, GRAY);
+                //
+                //        float volume_slider_length = 200.F;
+                //        float volume_slider_h = button_w * 0.25F;
+                //        Rectangle volume_slider_outer{
+                //            volume_slider_base_panel.x + 15,
+                //            volume_slider_base_panel.y + (volume_slider_base_panel.height - volume_slider_h) / 2,
+                //            volume_slider_length,
+                //            volume_slider_h
+                //        };
+                //        DrawRectangleRounded(volume_slider_outer, 0.7F, 5, BASE_COLOR);
+                //
+                //        float vol_ratio = volume_slider_outer.width / 1;
+                //        //if (CheckCollisionPointRec(mouse_position, volume_base_panel)) {
+                //            //if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                //            //    p->dragging = DRAG_VOLUME;
+                //            //}
+                //            //SetMasterVolume()
+                //        //}
+                //        //else {
+                //            //if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                //            //    p->dragging = DRAG_RELEASE;
+                //            //    HUD_volume = false;
+                //            //}
+                //        //}
+                //
+                //        if (CheckCollisionPointRec(mouse_position, volume_base_panel)) {
+                //            HUD_volume = true;
+                //        }
+                //        else {
+                //            HUD_volume = false;
+                //        }
+                //
+                //        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                //            p->dragging = DRAG_VOLUME;
+                //        }
+                //        else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                //            p->dragging = DRAG_RELEASE;
+                //            HUD_volume = false;
+                //        }
+                //
+                //        float vol_length = vol_ratio * GetMasterVolume();
+                //        if (p->dragging == DRAG_VOLUME && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                //            vol_length = mouse_position.x - volume_slider_outer.x;
+                //            if (vol_length < 0) vol_length = 0;
+                //            if (vol_length > 200) vol_length = 200;
+                //
+                //            //std::cout << vol_length << std::endl;
+                //            volume = vol_length / vol_ratio;
+                //            p->last_volume = volume;
+                //            SetMasterVolume(volume);
+                //            std::cout << volume << std::endl;
+                //        }
+                //
+                //        float vol_pad = 3.0F;
+                //        //vol_length = vol_ratio * GetMasterVolume();
+                //        Rectangle volume_slider_inner{
+                //            volume_slider_outer.x + (vol_pad * 1),
+                //            volume_slider_outer.y + (vol_pad * 1),
+                //            vol_length - (vol_pad * 2),
+                //            volume_slider_outer.height - (vol_pad * 2),
+                //        };
+                //        DrawRectangleRounded(volume_slider_inner, 0.7F, 5, LIGHTGRAY);
+                //
+                //    }
+                //
+                //    else {
+                //        volume_base_panel.width = button_w;
+                //        volume_expanded = false;
+                //        HUD_volume = false;
+                //    }
+                //
+                //}
+                //
+                //if (HUD_volume) {
+                //    // MOUSE WHEEL INPUT
+                //    float mouse_wheel_step = 0.05F;
+                //    float wheel_delta = GetMouseWheelMove();
+                //    volume += wheel_delta * mouse_wheel_step;
+                //    if (volume < 0) volume = 0;
+                //    if (volume > 1) volume = 1;
+                //
+                //    SetMasterVolume(volume);
+                //}
+                //else {
+                //    //p->dragging = DRAG_RELEASE;
+                //}
 
                 // FULLSCREEN BUTTON
-                pad = 7.0F;
-                Rectangle fullscreen_base_panel{
+                pad = 8.0F;
+                Rectangle fullscreen_panel{
                     panel_info.width - button_w,
-                    play_base_panel.y,
+                    play_panel.y,
                     button_w,
                     button_w
                 };
                 Rectangle fullscreen_rect{
-                    fullscreen_base_panel.x + (pad * 1),
-                    fullscreen_base_panel.y + (pad * 1),
-                    fullscreen_base_panel.width - (pad * 2),
-                    fullscreen_base_panel.height - (pad * 2),
+                    fullscreen_panel.x + (pad * 1),
+                    fullscreen_panel.y + (pad * 1),
+                    fullscreen_panel.width - (pad * 2),
+                    fullscreen_panel.height - (pad * 2),
                 };
                 //DrawRectangleRec(fullscreen_rect, RED);
 
@@ -653,14 +878,19 @@ int main()
             };
             DrawRectangleRec(progress_bar, PANEL_PROGRESS_COLOR);
 
-            static bool dragging_progress = false;
-            if (CheckCollisionPointRec(mouse_position, panel_progress)) {
-                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                    float t = (mouse_position.x - panel_progress.x) / panel_progress.width;
-                    SeekMusicStream(music, (t * duration / 1000));
-                } 
-                else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-                    p->dragging = DRAG_MUSIC_PROGRESS;
+            //static bool dragging_progress = false;
+            if (p->dragging != DRAG_VOLUME) {
+                if (CheckCollisionPointRec(mouse_position, panel_progress) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+
+                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                    // TERNYATA INI TIDAK BERGUNA
+                        float t = (mouse_position.x - panel_progress.x) / panel_progress.width;
+                        SeekMusicStream(music, (t * duration / 1000));
+                    }
+
+                    else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                        p->dragging = DRAG_MUSIC_PROGRESS;
+                    }
                 }
             }
 
@@ -689,7 +919,6 @@ int main()
                 }
                 SeekMusicStream(music, (t * duration / 1000));
             }
-
 
             // MAIN PANEL
             Rectangle panel_main{
@@ -773,10 +1002,10 @@ int main()
     CloseWindow();
 }
 
-void DrawPlayPause(const Rectangle& play_rect)
+void DrawPlayPause(const Rectangle& play_rect, const Rectangle& hover_panel)
 {
     Color icon_color = LIGHTGRAY;
-    if (CheckCollisionPointRec(mouse_position, play_rect)) {
+    if (CheckCollisionPointRec(mouse_position, hover_panel)) {
         icon_color = WHITE;
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             p->music_playing = !p->music_playing;
