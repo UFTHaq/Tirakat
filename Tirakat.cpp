@@ -408,7 +408,7 @@ int main()
             };
             DrawRectangleRec(panel_left, PANEL_COLOR);
             // VERTICAL LINE
-            float line_width = 4.0F;
+            float line_width = offset_y;
             Rectangle panel_left_line{
                 panel_left.x + panel_left.width - line_width,
                 0,
@@ -458,7 +458,7 @@ int main()
             static bool scrolling = false;
             static float scrolling_mouse_offset = 0.0F;
             if (scrolling) {
-                content_scroll = (mouse_position.y - panel_left.y - scrolling_mouse_offset) / (visible_area_size * entire_scrollable_area);
+                content_scroll = (mouse_position.y - panel_left.y - scrolling_mouse_offset) / visible_area_size * entire_scrollable_area;
             }
 
             float min_scroll = 0;
@@ -478,9 +478,9 @@ int main()
             for (size_t i = 0; i < data.size(); i++) {
 
                 Rectangle content{
-                    content_boundary.x + (content_panel_pad * 1),
+                    content_boundary.x + (content_panel_pad * 2),
                     content_boundary.y + (content_panel_pad * 1) + (i * content_h) - content_scroll,
-                    content_boundary.width - (content_panel_pad * 2),
+                    content_boundary.width - (content_panel_pad * 3),
                     content_boundary.height - (content_panel_pad * 2)
                 };
                 //DrawRectangleRec(content, GRAY);
@@ -492,11 +492,13 @@ int main()
                     if (CheckCollisionPointRec(mouse_position, content)) {
                         color_content = DARKGRAY;
 
-                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                            order = i;
-                            // Music Play Load
-                            music = LoadMusicStream(data.at(order).path.c_str());
-                            p->reset_time = true;
+                        if (p->dragging == DRAG_RELEASE) {
+                            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                                order = i;
+                                // Music Play Load
+                                music = LoadMusicStream(data.at(order).path.c_str());
+                                p->reset_time = true;
+                            }
                         }
                     }
                 }
@@ -545,13 +547,13 @@ int main()
                 };
                 //DrawRectangleRec(scroll_bar_area, DARKBLUE);
 
-                Rectangle scroll_bar_boundry{
+                Rectangle scroll_bar_boundary{
                     scroll_bar_area.x,
                     scroll_bar_area.y + scroll_bar_area.height * q,
                     scroll_bar_area.width,
                     scroll_bar_area.height * t
                 };
-                DrawRectangleRounded(scroll_bar_boundry, 0.7F, 10, Fade(CONTENT_CHOOSE_COLOR, 0.4F));
+                DrawRectangleRounded(scroll_bar_boundary, 0.7F, 10, Fade(CONTENT_CHOOSE_COLOR, 0.4F));
                 
                 if (scrolling) {
                     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
@@ -560,18 +562,20 @@ int main()
 
                 }
                 else {
-                    if (CheckCollisionPointRec(mouse_position, scroll_bar_boundry)) {
+                    if (CheckCollisionPointRec(mouse_position, scroll_bar_boundary)) {
+
+
                         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                             scrolling = true;
-                            scrolling_mouse_offset = mouse_position.y - scroll_bar_boundry.y;
+                            scrolling_mouse_offset = mouse_position.y - scroll_bar_boundary.y;
                         }
                     } 
                     else if (CheckCollisionPointRec(mouse_position, scroll_bar_area)) {
                         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                            if (mouse_position.y < scroll_bar_boundry.y) {
+                            if (mouse_position.y < scroll_bar_boundary.y) {
                                 content_velocity += (content_h * 20);
                             }
-                            else if (scroll_bar_boundry.y + scroll_bar_boundry.height < mouse_position.y) {
+                            else if (scroll_bar_boundary.y + scroll_bar_boundary.height < mouse_position.y) {
                                 content_velocity += -(content_h * 20);
                             }
                         }
@@ -941,7 +945,7 @@ int main()
             float setting_card_w = 180.0F;
             Rectangle setting_base_panel{
                 panel_main.x,
-                panel_main.y + panel_main.height - volume_panel.height - 10,
+                panel_main.y + panel_main.height - volume_panel.height - 5,
                 button_w + setting_card_w + button_w,
                 button_w
             };
@@ -983,7 +987,7 @@ int main()
                 //DrawRectangleRec(setting_card_base, LIGHTGRAY);
 
                 // DRAW SETTING CARD
-                pad = 3.0F;
+                pad = 4.0F;
                 Rectangle setting_card{
                     setting_card_base.x,
                     setting_card_base.y + (pad * 1),
@@ -1575,7 +1579,7 @@ void DrawCounter(Rectangle& panel_main)
     std::string cpp_text = counter + " / " + target;
 
     const char* text = cpp_text.c_str();
-    float font_size = 80.0F;
+    float font_size = 70.0F;
     float font_space = 0.0F;
     Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
     Vector2 text_coor{
