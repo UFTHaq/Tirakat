@@ -10,10 +10,6 @@
 #include <raylib.h>
 
 
-extern "C" {
-    #include <libavformat/avformat.h>
-}
-
 //#define FONT_LOC {"D:/Coding/Raylib C++/Tirakat/resources/Fonts/Playfair_Display/static/PlayfairDisplay-Regular.ttf"}
 #define FONT_LOC_Roboto_Slab {"D:/Coding/Raylib C++/Tirakat/resources/Fonts/Roboto_Slab/static/RobotoSlab-Regular.ttf"}
 //#define FONT_LOC_BOLD {"D:/Coding/Raylib C++/Tirakat/resources/Fonts/Roboto_Slab/static/RobotoSlab-SemiBold.ttf"}
@@ -43,6 +39,7 @@ enum Page {
 enum Drag {
     DRAG_MUSIC_PROGRESS,
     DRAG_VOLUME,
+    DRAG_CONTENT,
     DRAG_RELEASE
 };
 
@@ -291,6 +288,15 @@ int main()
 
             
             if (p->fullscreen) {
+
+                p->mouse_onscreen = (CheckCollisionPointRec(mouse_position, { 0, 0, screen_w, screen_h }));
+
+                if (p->mouse_onscreen) {
+
+                } 
+                else {
+
+                }
                 // TODO: different layouts and add HUD
                 static float hud_timer = HUD_TIMER_SECS;
 
@@ -351,6 +357,8 @@ int main()
                 DrawPlayPause(play_rect, play_base_panel);
             }
             if (!p->fullscreen) {
+
+                
 
             }
             
@@ -1641,29 +1649,11 @@ void ReloadVector()
 
 int GetDuration(const char* c_file_path)
 {
-    avformat_network_init();
-    AVFormatContext* formatContext = nullptr;
-    if (avformat_open_input(&formatContext, c_file_path, nullptr, nullptr) != 0) {
-        std::cerr << "Error: Couldn't open file '" << c_file_path << "'" << std::endl;
-        //return 1;
-    }
-    // Retrieve stream information
-    if (avformat_find_stream_info(formatContext, nullptr) < 0) {
-        std::cerr << "Error: Couldn't find stream information" << std::endl;
-        avformat_close_input(&formatContext);
-        //return 1;
-    }
-    // Get duration in seconds
-    int64_t durationInSeconds = formatContext->duration / AV_TIME_BASE;
-
     // Convert duration to milliseconds
-    int durationInMilliseconds = static_cast<int>(durationInSeconds * 1000);
+    int durationInMilliseconds = static_cast<int>(GetMusicTimeLength(LoadMusicStream(c_file_path))) * 1000;
 
     // Print duration in milliseconds
     std::cout << "Duration: " << durationInMilliseconds << " milliseconds" << std::endl;
-
-    // Close the input file
-    avformat_close_input(&formatContext);
 
     return durationInMilliseconds;
 }
