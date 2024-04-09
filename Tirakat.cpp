@@ -37,6 +37,7 @@
 
 #define BASE_COLOR                  Color{  20,  20,  20, 200 }
 #define PANEL_COLOR                 Color{  35,  35,  35, 255 }
+#define PANEL_COLOR2                Color{  30,  30,  30, 255 }
 #define PANEL_LINE_COLOR            Color{  60,  60,  60, 255 }
 #define PANEL_PROGRESS_BASE_COLOR   Color{  25,  25,  25, 255 }
 //#define PANEL_PROGRESS_COLOR        Color{  60, 178, 181, 255 }
@@ -180,7 +181,7 @@ bool popup_on = false;
 
 std::string popup_title{};
 
-int main()
+int WinMain()
 {
     std::cout << "Hello World!\n";
     std::cout << "RAYLIB VERSION: " << RAYLIB_VERSION << std::endl;
@@ -189,25 +190,25 @@ int main()
     const int screen_h = 580;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_ALWAYS_RUN);
-    //SetConfigFlags(FLAG_MSAA_4X_HINT);
+    SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(screen_w, screen_h, "Tirakat");
     InitAudioDevice();
     SetTargetFPS(60);
     SetWindowIcon(LoadImage(ICON_APP_LOC));
 
-    font_m = LoadFontEx(FONT_LOC_Roboto_Slab, 60, 0, 0);
+    font_m = LoadFontEx(FONT_LOC_Roboto_Slab, 90, 0, 0);
     SetTextureFilter(font_m.texture, TEXTURE_FILTER_BILINEAR);
-
-    font_s_bold = LoadFontEx(FONT_LOC_Source_Sans_BOLD, 45, 0, 0);
+     
+    font_s_bold = LoadFontEx(FONT_LOC_Source_Sans_BOLD, 64, 0, 0);
     SetTextureFilter(font_s_bold.texture, TEXTURE_FILTER_BILINEAR);
 
-    font_s_semibold = LoadFontEx(FONT_LOC_Source_Sans_SEMIBOLD, 40, 0, 0);
+    font_s_semibold = LoadFontEx(FONT_LOC_Source_Sans_SEMIBOLD, 56, 0, 0);
     SetTextureFilter(font_s_semibold.texture, TEXTURE_FILTER_BILINEAR);
 
-    font_s_reg = LoadFontEx(FONT_LOC_Source_Sans_REG, 40, 0, 0);
+    font_s_reg = LoadFontEx(FONT_LOC_Source_Sans_REG, 48, 0, 0);
     SetTextureFilter(font_s_reg.texture, TEXTURE_FILTER_BILINEAR);
 
-    font_number = LoadFontEx(FONT_LOC_Roboto_Mono, 40, 0, 0);
+    font_number = LoadFontEx(FONT_LOC_Roboto_Mono, 52, 0, 0);
     SetTextureFilter(font_number.texture, TEXTURE_FILTER_BILINEAR);
 
     font_counter = LoadFontEx(FONT_LOC_Roboto_Mono, 100, 0, 0);
@@ -281,6 +282,7 @@ int main()
         switch (p->page)
         {
         case PAGE_DRAG_DROP:
+
             DrawDragDropPage(screen_w, screen_h);
             
             break;
@@ -323,7 +325,7 @@ void Check_StartUp_Page()
 void DrawDragDropPage(float screen_w, float screen_h)
 {
     const char* text = "Drag&Drop MP3 Here";
-    float font_size = 50;
+    float font_size = 55;
     float font_space = 1;
     Color font_color = RAYWHITE;
     Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
@@ -558,7 +560,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
                 PANEL_PROGRESS_HEIGHT
             };
 
-            DrawRectangleRec(panel_duration, PANEL_COLOR);
+            DrawRectangleRec(panel_duration, PANEL_COLOR2);
             font = &font_number;
             DrawDuration(panel_duration);
         }
@@ -655,7 +657,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
             PANEL_LEFT_WIDTH - PANEL_LINE_THICK,
             0,
             PANEL_LINE_THICK,
-            screen_h
+            screen_h - PANEL_PROGRESS_HEIGHT
         };
         DrawRectangleRec(panel_vertical_line, PANEL_LINE_COLOR);
 
@@ -666,7 +668,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
             PANEL_LEFT_WIDTH - PANEL_LINE_THICK,
             panel_bottom.height
         };
-        DrawRectangleRec(panel_duration, PANEL_COLOR);
+        DrawRectangleRec(panel_duration, PANEL_COLOR2);
         font = &font_number;
         DrawDuration(panel_duration);
 
@@ -1327,7 +1329,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
                 font = &font_s_bold;
                 font_color = BLACK;
                 const char* text = popup_title.c_str();
-                float font_size = title_rect.height * 0.65F;
+                float font_size = title_rect.height * 0.7F;
                 float font_space = 0.0F;
                 Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
                 Vector2 text_coor{
@@ -1393,7 +1395,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
                 font = &font_s_bold;
                 font_color = BLACK;
                 const char* text = cpp_text.c_str();
-                float font_size = title_rect.height * 0.7F;
+                float font_size = title_rect.height * 0.725F;
                 float font_space = -0.25F;
                 Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
                 Vector2 text_coor{
@@ -1958,7 +1960,8 @@ void FileCheck(const std::filesystem::path& filename)
     }
 }
 
-void InitFile(const std::filesystem::path& filename) {
+void InitFile(const std::filesystem::path& filename) 
+{
     std::ofstream file(filename);
 
     if (file.is_open()) {
