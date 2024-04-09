@@ -245,7 +245,7 @@ int main()
 
     Check_StartUp_Page();
 
-    //SetMasterVolume(0.5F);
+    SetMasterVolume(0.5F);
     p->dragging = DRAG_RELEASE;
 
 
