@@ -299,6 +299,8 @@ int WinMain()
 
         EndDrawing();
     }
+
+    CloseAudioDevice();
     CloseWindow();
 
     return 0;
