@@ -1,5 +1,11 @@
 # Tirakat
 
+<div align="center">
+    <img src="https://github.com/UFTHaq/Tirakat/assets/104829519/5e01e038-0594-4200-b30a-586d3f17c845" width=180/>
+</div>
+
+## Tirakat Demo App
+
 https://github.com/UFTHaq/Tirakat/assets/104829519/38b72c03-ab18-4d67-89af-3bb935e8e13a
 
 Windows Alpha Release 1
