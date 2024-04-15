@@ -80,3 +80,7 @@ here is the detail feature:
   https://github.com/UFTHaq/Tirakat
 
 - Have fun!
+
+<p align="center">
+  <b>If you consider this page is useful, please leave a star ⭐</b>
+</p>
