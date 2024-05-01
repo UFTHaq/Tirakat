@@ -2,8 +2,9 @@
 //
 
 // MAYBE NEXT BIG TODO: ADD VISUALIZATION ?
-// 1. FFT STYLE
-// 2. SINUSOID SIGNAL STYLE
+// 1. FFT (FREQ DOMAIN) SIGNAL STYLE
+// 2. TIME DOMAIN SIGNAL STYLE
+// 3. ADD Functionality to can add multiple music at one time
 
 #include <iostream>
 #include <filesystem>
@@ -13,37 +14,38 @@
 #include <string>
 #include <raylib.h>
 
-#define FONT_LOC_Roboto_Slab {"D:/Coding/Raylib C++/Tirakat/resources/Fonts/Roboto_Slab/static/RobotoSlab-Regular.ttf"}
-#define FONT_LOC_Roboto_Mono {"D:/Coding/Raylib C++/Tirakat/resources/Fonts/Roboto_Mono/static/RobotoMono-SemiBold.ttf"}
-#define FONT_LOC_Source_Sans_BOLD {"D:/Coding/Raylib C++/Tirakat/resources/Fonts/Source_Sans_3/static/SourceSans3-Bold.ttf"}
-#define FONT_LOC_Source_Sans_SEMIBOLD {"D:/Coding/Raylib C++/Tirakat/resources/Fonts/Source_Sans_3/static/SourceSans3-SemiBold.ttf"}
-#define FONT_LOC_Source_Sans_REG {"D:/Coding/Raylib C++/Tirakat/resources/Fonts/Source_Sans_3/static/SourceSans3-Regular.ttf"}
+#define FONT_LOC_Roboto_Slab {"resources/Fonts/Roboto_Slab/static/RobotoSlab-Regular.ttf"}
+#define FONT_LOC_Roboto_Mono {"resources/Fonts/Roboto_Mono/static/RobotoMono-SemiBold.ttf"}
+#define FONT_LOC_Source_Sans_BOLD {"resources/Fonts/Source_Sans_3/static/SourceSans3-Bold.ttf"}
+#define FONT_LOC_Source_Sans_SEMIBOLD {"resources/Fonts/Source_Sans_3/static/SourceSans3-SemiBold.ttf"}
+#define FONT_LOC_Source_Sans_REG {"resources/Fonts/Source_Sans_3/static/SourceSans3-Regular.ttf"}
 
-#define ICON_APP_LOC        {"D:/Coding/Raylib C++/Tirakat/resources/Icons/Tirakat-V4.png"}
-#define ICON_PLAYPAUSE_LOC  {"D:/Coding/Raylib C++/Tirakat/resources/Icons/PlayPause.png"}
-#define ICON_FULLSCREEN_LOC {"D:/Coding/Raylib C++/Tirakat/resources/Icons/Fullscreen.png"}
-#define ICON_VOLUME_LOC     {"D:/Coding/Raylib C++/Tirakat/resources/Icons/Volume.png"}
-#define ICON_SETTING_LOC    {"D:/Coding/Raylib C++/Tirakat/resources/Icons/Setting.png"}
-#define ICON_X_LOC          {"D:/Coding/Raylib C++/Tirakat/resources/Icons/X.png"}
-#define ICON_DELETE_LOC     {"D:/Coding/Raylib C++/Tirakat/resources/Icons/Trash.png"}
-#define ICON_MODE_LOC       {"D:/Coding/Raylib C++/Tirakat/resources/Icons/Mode.png"}
+#define ICON_APP_LOC        {"resources/Icons/Tirakat-V4.png"}
+#define ICON_PLAYPAUSE_LOC  {"resources/Icons/PlayPause.png"}
+#define ICON_FULLSCREEN_LOC {"resources/Icons/Fullscreen.png"}
+#define ICON_VOLUME_LOC     {"resources/Icons/Volume.png"}
+#define ICON_SETTING_LOC    {"resources/Icons/Setting.png"}
+#define ICON_X_LOC          {"resources/Icons/X.png"}
+#define ICON_DELETE_LOC     {"resources/Icons/Trash.png"}
+#define ICON_MODE_LOC       {"resources/Icons/Mode.png"}
 
 #define HUD_TIMER_SECS 1.5F
-#define PANEL_LEFT_WIDTH 300.0F
-#define PANEL_INFO_HEIGHT 55.0F
-#define PANEL_PROGRESS_HEIGHT 15.0F
+#define PANEL_LEFT_WIDTH 280.0F
+#define PANEL_INFO_HEIGHT 50.0F
+#define PANEL_PROGRESS_HEIGHT 10.0F // 15.0F
 #define PANEL_PROGRESS_HEIGHT_FULLSCREEN_OFFSCREEN 5.0F
-#define PANEL_LINE_THICK 4.0F
+#define PANEL_LINE_THICK 4.0F // 4.0F
 
 #define BASE_COLOR                  Color{  20,  20,  20, 200 }
 #define PANEL_COLOR                 Color{  35,  35,  35, 255 }
 #define PANEL_COLOR2                Color{  30,  30,  30, 255 }
-#define PANEL_LINE_COLOR            Color{  60,  60,  60, 255 }
+//#define PANEL_LINE_COLOR            Color{  60,  60,  60, 255 }
+#define PANEL_LINE_COLOR            Color{  20,  20,  20, 255 }
 #define PANEL_PROGRESS_BASE_COLOR   Color{  25,  25,  25, 255 }
 //#define PANEL_PROGRESS_COLOR        Color{  60, 178, 181, 255 }
 //#define PANEL_PROGRESS_COLOR        Color{ 120, 200, 160, 255 }
 //#define PANEL_PROGRESS_COLOR        Color{ 0, 255, 128, 255 }
-#define PANEL_PROGRESS_COLOR        WHITE
+#define PANEL_PROGRESS_COLOR        LIGHTGRAY
 
 #define CONTENT_COLOR               Color{  50,  50,  50, 255 }
 //#define CONTENT_CHOOSE_COLOR        Color{  50, 169,  75, 255 }
@@ -181,7 +183,7 @@ bool popup_on = false;
 
 std::string popup_title{};
 
-int WinMain()
+int main()
 {
     std::cout << "Hello World!\n";
     std::cout << "RAYLIB VERSION: " << RAYLIB_VERSION << std::endl;
@@ -191,6 +193,7 @@ int WinMain()
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_ALWAYS_RUN);
     SetConfigFlags(FLAG_MSAA_4X_HINT);
+
     InitWindow(screen_w, screen_h, "Tirakat");
     InitAudioDevice();
     SetTargetFPS(60);
@@ -202,7 +205,7 @@ int WinMain()
     font_s_bold = LoadFontEx(FONT_LOC_Source_Sans_BOLD, 64, 0, 0);
     SetTextureFilter(font_s_bold.texture, TEXTURE_FILTER_BILINEAR);
 
-    font_s_semibold = LoadFontEx(FONT_LOC_Source_Sans_SEMIBOLD, 56, 0, 0);
+    font_s_semibold = LoadFontEx(FONT_LOC_Source_Sans_SEMIBOLD, 60, 0, 0);
     SetTextureFilter(font_s_semibold.texture, TEXTURE_FILTER_BILINEAR);
 
     font_s_reg = LoadFontEx(FONT_LOC_Source_Sans_REG, 48, 0, 0);
@@ -211,7 +214,7 @@ int WinMain()
     font_number = LoadFontEx(FONT_LOC_Roboto_Mono, 52, 0, 0);
     SetTextureFilter(font_number.texture, TEXTURE_FILTER_BILINEAR);
 
-    font_counter = LoadFontEx(FONT_LOC_Roboto_Mono, 100, 0, 0);
+    font_counter = LoadFontEx(FONT_LOC_Roboto_Mono, 50, 0, 0);
     SetTextureFilter(font_counter.texture, TEXTURE_FILTER_BILINEAR);
 
     Image play_pause_icon = LoadImage(ICON_PLAYPAUSE_LOC);
@@ -397,7 +400,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
     }
 
     if (IsMusicReady(music)) {
-        SetMusicVolume(music, 0.25F);
+        SetMusicVolume(music, 0.5F);
         UpdateMusicStream(music);
 
         if (p->music_playing) {
@@ -586,24 +589,39 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
         }
 
         // MAIN PANEL
-        float padding = 20.0F;
         {
-            BeginScissorMode(
-                static_cast<int>(panel_main.x + (padding * 1)),
-                static_cast<int>(panel_main.y + (padding * 1)),
-                static_cast<int>(panel_main.width - (padding * 2)),
-                static_cast<int>(panel_main.height - (padding * 2))
-            );
+            float padding = 20.0F;
 
             font = &font_s_semibold;
-            DrawTitleMP3(panel_main);
-            font = &font_counter;
-            DrawCounter(panel_main);
-
+            Rectangle title_display_rect{
+                panel_main.x,
+                panel_main.y + 30,
+                panel_main.width,
+                50
+            };
+            BeginScissorMode(
+                static_cast<int>(title_display_rect.x + (padding * 1)),
+                static_cast<int>(title_display_rect.y + (padding * 0)),
+                static_cast<int>(title_display_rect.width - (padding * 2)),
+                static_cast<int>(title_display_rect.height - (padding * 0))
+            );
+            //DrawRectangleRec(title_display_rect, RED);
+            DrawTitleMP3(title_display_rect);
             EndScissorMode();
-        }
 
+            font = &font_counter;
+            Rectangle counter_display_rect{
+                title_display_rect.x,
+                title_display_rect.y + 50,
+                title_display_rect.width,
+                50
+            };
+            //DrawRectangleRec(counter_display_rect, GOLD);
+            DrawCounter(counter_display_rect);
+
+        }
     }
+
 
     // NOT FULLSCREEN
     if (!p->fullscreen) {
@@ -623,21 +641,35 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
             screen_w - panel_left.width,
             panel_left.height
         };
-        float padding = 20.0F;
         {
-            BeginScissorMode(
-                static_cast<int>(panel_main.x + (padding * 1)),
-                static_cast<int>(panel_main.y + (padding * 1)),
-                static_cast<int>(panel_main.width - (padding * 2)),
-                static_cast<int>(panel_main.height - (padding * 2))
-            );
+            float padding = 20.0F;
 
             font = &font_s_semibold;
-            DrawTitleMP3(panel_main);
-            font = &font_counter;
-            DrawCounter(panel_main);
-
+            Rectangle title_display_rect{
+                panel_main.x,
+                panel_main.y + 30,
+                panel_main.width,
+                50
+            };
+            BeginScissorMode(
+                static_cast<int>(title_display_rect.x + (padding * 1)),
+                static_cast<int>(title_display_rect.y + (padding * 0)),
+                static_cast<int>(title_display_rect.width - (padding * 2)),
+                static_cast<int>(title_display_rect.height - (padding * 0))
+            );
+            //DrawRectangleRec(title_display_rect, RED);
+            DrawTitleMP3(title_display_rect);
             EndScissorMode();
+
+            font = &font_counter;
+            Rectangle counter_display_rect{
+                title_display_rect.x,
+                title_display_rect.y + 50,
+                title_display_rect.width,
+                50
+            };
+            //DrawRectangleRec(counter_display_rect, GOLD);
+            DrawCounter(counter_display_rect);
         }
 
         panel_horizontal_line = {
@@ -856,7 +888,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
 
         // PLAY BUTTON
         float button_w = panel_media.height;
-        float pad = 8.0F;
+        float pad = 10.0F;
         //float offset_y = 2.0F;
         Rectangle play_panel = {
             panel_media.x,
@@ -892,7 +924,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
         };
         //DrawRectangleRec(volume_panel, DARKBLUE);
 
-        pad = 8.0F;
+        pad = 11.0F;
         Rectangle volume_icon_rect{
             volume_base_panel.x + (pad * 1),
             volume_base_panel.y + (pad * 1),
@@ -958,7 +990,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
 
             // SLIDER DRAW - START
             int volume_slider_w = 200;
-            float volume_slider_h = button_w * 0.15F;
+            float volume_slider_h = button_w * 0.12F;
             float vol_ratio = static_cast<float>(volume_slider_w) / 1;
             float vol_length = vol_ratio * GetMasterVolume();
 
@@ -983,7 +1015,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
             // DRAW CIRCLE
             int circle_center_x = static_cast<int>(volume_slider.x) + static_cast<int>(volume_slider.width);
             int circle_center_y = static_cast<int>(volume_slider.y) + static_cast<int>(volume_slider.height / 2) + 1;
-            float radius = 7.0F;
+            float radius = 6.0F;
             DrawCircle(circle_center_x, circle_center_y, radius + 5, BASE_COLOR);
             DrawCircle(circle_center_x, circle_center_y, radius, LIGHTGRAY);
             // SLIDER DRAW - END
@@ -1057,7 +1089,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
         }
 
         // FULLSCREEN BUTTON
-        pad = 4.0F;
+        pad = 6.0F;
         Rectangle fullscreen_panel{
             panel_bottom.width - button_w,
             play_panel.y,
@@ -1121,7 +1153,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
         button_w
     };
     //DrawRectangleRec(setting_base_panel, PANEL_COLOR);
-    float pad = 8.0F;
+    float pad = 10.0F;
     Rectangle setting_rect_icon{
         setting_base_panel.x + (pad * 1),
         setting_base_panel.y + (pad * 1),
@@ -1156,7 +1188,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
         //DrawRectangleRec(setting_card_base, LIGHTGRAY);
 
         // DRAW SETTING CARD
-        pad = 4.0F;
+        pad = 5.0F;
         Rectangle setting_card{
             setting_card_base.x,
             setting_card_base.y + (pad * 1),
@@ -1164,13 +1196,13 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
             setting_card_base.height - (pad * 2)
         };
         //DrawRectangleRec(setting_card, PANEL_COLOR);
-        DrawRectangleRounded(setting_card, 0.5F, 10, PANEL_COLOR);
+        DrawRectangleRounded(setting_card, 0.3F, 10, PANEL_COLOR);
 
         // DRAW CENTER LINE
         float line_h = setting_card.height * 0.7F;
         float line_w = 5.0F;
         Rectangle setting_center_line{
-            setting_card.x + ((setting_card.width - line_w) * (1.15F / 3.0F)),
+            setting_card.x + ((setting_card.width - line_w) * (1.1F / 3.0F)),
             setting_card.y + ((setting_card.height - line_h) / 2),
             line_w,
             line_h
@@ -1178,7 +1210,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
         DrawRectangleRounded(setting_center_line, 0.8F, 10, DARKGRAY);
 
         // DRAW MUSIC TARGET NOW
-        pad = 6.0F;
+        pad = 5.0F;
         Rectangle target_rect{
             setting_card.x + (pad * 1.5F),
             setting_card.y + (pad * 1),
@@ -1200,7 +1232,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
             DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
         }
         // DRAW RESET BUTTON
-        pad = 6.0F;
+        pad = 4.0F;
         Rectangle reset_rect{
             (setting_center_line.x + setting_center_line.width) + 5 + (pad * 1.5F),
             setting_card.y + (pad * 1.25F),
@@ -1234,6 +1266,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
         }
 
         // DRAW DELELE RECT
+        pad = 5.0F;
         Rectangle delete_rect{
             setting_card.x + setting_card.width - setting_base_panel.height + 5 + (pad * 1.0F),
             setting_card.y + (pad * 1.0F),
@@ -1605,7 +1638,10 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
         }
     }
 
-    if (setting_on == OFF) input.clear();
+    if (setting_on == OFF) {
+        input.clear();
+        SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+    }
 
 
     // MODE PANEL
@@ -1618,7 +1654,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
             button_w
         };
         //DrawRectangleRec(mode_base_panel, PANEL_COLOR);
-        float pad = 8.0F;
+        float pad = 10.0F;
         Rectangle mode_rect_icon{
             mode_base_panel.x + (pad * 1),
             mode_base_panel.y + (pad * 1),
@@ -1766,8 +1802,6 @@ void ApplyInputReset(std::string& input, bool& popup_on, std::string& name, bool
 
     if (Save()) TraceLog(LOG_INFO, "[SUCCESS] Reset Target of [%s] from : [%d] to : [%d]", name.c_str(), old_target, new_target);
 
-    SetMouseCursor(MOUSE_CURSOR_DEFAULT);
-
     // CLEAR
     if (popup_on == OFF) input.clear();
 
@@ -1860,19 +1894,19 @@ void DrawDuration(Rectangle& panel_duration)
     DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
 }
 
-void DrawCounter(Rectangle& panel_main)
+void DrawCounter(Rectangle& panel)
 {
     std::string counter = std::to_string(data.at(order).counter);
     std::string target = std::to_string(data.at(order).target);
     std::string cpp_text = counter + " / " + target;
 
     const char* text = cpp_text.c_str();
-    float font_size = 70.0F;
+    float font_size = 30.0F;
     float font_space = 0.0F;
     Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
     Vector2 text_coor{
-        panel_main.x + (panel_main.width - text_measure.x) / 2,
-        panel_main.y + (panel_main.height - text_measure.y) / 2 + 20.0F
+        panel.x + (panel.width - text_measure.x) / 2,
+        panel.y + (panel.height - text_measure.y) / 2
     };
     Color color = RAYWHITE;
     Data data_check = data.at(order);
@@ -1882,7 +1916,7 @@ void DrawCounter(Rectangle& panel_main)
     DrawTextEx(*font, text, text_coor, font_size, font_space, color);
 }
 
-void DrawTitleMP3(Rectangle& panel_main)
+void DrawTitleMP3(Rectangle& panel)
 {
     std::string cpp_text = data.at(order).name;
     const char* text = cpp_text.c_str();
@@ -1890,8 +1924,8 @@ void DrawTitleMP3(Rectangle& panel_main)
     float font_space = 0.0F;
     Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
     Vector2 text_coor{
-        panel_main.x + (panel_main.width - text_measure.x) / 2,
-        panel_main.y + (40.0F)
+        panel.x + (panel.width - text_measure.x) / 2,
+        panel.y + (panel.height - text_measure.y) / 2
     };
     DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
 }
