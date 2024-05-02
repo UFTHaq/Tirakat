@@ -267,9 +267,6 @@ int main()
             // TODO: put dialog. what is the target repetition value for this mp3.
             LoadMP3();
 
-            popup_title = "Set Target New mp3";
-            setting_on = ON;
-            popup_on = ON;
         }
 
         BeginDrawing();
@@ -399,8 +396,11 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
         interval_time = 0;
     }
 
+    static float music_volume = 0.5F;
+    if (music_volume < 0.5F) music_volume += 0.02F;
+
     if (IsMusicReady(music)) {
-        SetMusicVolume(music, 0.5F);
+        SetMusicVolume(music, music_volume);
         UpdateMusicStream(music);
 
         if (p->music_playing) {
@@ -599,13 +599,13 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
                 panel_main.width,
                 50
             };
+            //DrawRectangleRec(title_display_rect, RED);
             BeginScissorMode(
                 static_cast<int>(title_display_rect.x + (padding * 1)),
                 static_cast<int>(title_display_rect.y + (padding * 0)),
                 static_cast<int>(title_display_rect.width - (padding * 2)),
                 static_cast<int>(title_display_rect.height - (padding * 0))
             );
-            //DrawRectangleRec(title_display_rect, RED);
             DrawTitleMP3(title_display_rect);
             EndScissorMode();
 
@@ -651,13 +651,13 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
                 panel_main.width,
                 50
             };
+            //DrawRectangleRec(title_display_rect, RED);
             BeginScissorMode(
                 static_cast<int>(title_display_rect.x + (padding * 1)),
                 static_cast<int>(title_display_rect.y + (padding * 0)),
                 static_cast<int>(title_display_rect.width - (padding * 2)),
                 static_cast<int>(title_display_rect.height - (padding * 0))
             );
-            //DrawRectangleRec(title_display_rect, RED);
             DrawTitleMP3(title_display_rect);
             EndScissorMode();
 
@@ -715,9 +715,9 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
         DrawRectangleRec(panel_media, PANEL_COLOR);
 
         panel_progress = {
-            0,
+            PANEL_LEFT_WIDTH,
             screen_h - PANEL_PROGRESS_HEIGHT,
-            screen_w,
+            screen_w - PANEL_LEFT_WIDTH,
             PANEL_PROGRESS_HEIGHT
         };
 
@@ -1684,7 +1684,7 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
     panel_progress = panel_progress;
     DrawRectangleRec(panel_progress, PANEL_PROGRESS_BASE_COLOR);
 
-    float progress_ratio = static_cast<float>(screen_w) / duration;
+    float progress_ratio = static_cast<float>(panel_progress.width) / duration;
     static float progress_w = 0;
     if (p->dragging != DRAG_MUSIC_PROGRESS) {
         progress_w = progress_ratio * music_time;
@@ -1716,11 +1716,13 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
 
     if (p->dragging == DRAG_MUSIC_PROGRESS && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
         p->music_playing = false;
-        progress_w = mouse_position.x;
+        music_volume = 0.0F;
+        progress_w = mouse_position.x - panel_progress.x;
+
         music_time = static_cast<int>(progress_w / progress_ratio);
 
         if (music_time < 0) {
-            music_time = 0;
+            music_time = 1;
         }
         else if (music_time > duration) {
             music_time = duration;
@@ -1731,11 +1733,11 @@ void DrawMainPage(float screen_h, float screen_w, int& retFlag)
         p->music_playing = true;
 
         float t = (mouse_position.x - panel_progress.x) / panel_progress.width;
-        if (mouse_position.x < 0) {
-            t = (1 - panel_progress.x) / panel_progress.width;
+        if (mouse_position.x < panel_progress.x) {
+            t = 0.001F;
         }
-        else if (mouse_position.x > screen_w) {
-            t = (1 + screen_w - panel_progress.x) / panel_progress.width;
+        else if (mouse_position.x - panel_progress.x > panel_progress.width) {
+            t = 0.999F;
         }
         SeekMusicStream(music, (t * duration / 1000));
     }
@@ -1777,9 +1779,9 @@ void LoadMP3()
             TraceLog(LOG_INFO, "[SUCCESS] Save [%s] to data.txt", file_name.c_str());
             zero_data = false;
             ReloadVector();
-            order = data.size() - 1;
-            music = LoadMusicStream(data.at(order).path.c_str());
-            p->reset_time = true;
+            //order = data.size() - 1;
+            //music = LoadMusicStream(data.at(order).path.c_str());
+            //p->reset_time = true;
         }
         else {
             TraceLog(LOG_ERROR, "Failed to save [%s]", file_name.c_str());
