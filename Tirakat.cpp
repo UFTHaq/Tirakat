@@ -27,6 +27,7 @@
 #include <thread>
 
 #include <raylib.h>
+#include <rlgl.h>
 #include <fftw3.h>
 #include <SFML/Audio.hpp>
 
@@ -118,6 +119,8 @@ struct Plug {
     bool glow{ false };
     int mode{ MULTI_PEAK };
     bool moving_save{ false };
+    Shader circle{};
+    Shader bubble{};
 };
 
 Plug tirakat{};
@@ -418,7 +421,7 @@ int main()
 
     InitWindow((int)screen.w, (int)screen.h, "Tirakat");
     InitAudioDevice();
-    SetTargetFPS(150);
+    SetTargetFPS(99);
     SetWindowIcon(LoadImage(ICON_APP_LOC));
 
     font_m = LoadFontEx(FONT_LOC_Roboto_Slab, 90, 0, 0);
@@ -466,6 +469,9 @@ int main()
     Image delete_icon = LoadImage(ICON_DELETE_LOC);
     DELETE_TEX = LoadTextureFromImage(delete_icon);
     SetTextureFilter(DELETE_TEX, TEXTURE_FILTER_BILINEAR);
+
+    p->circle = LoadShader(NULL, "resources/shaders/circle.fs");
+    p->bubble = LoadShader(NULL, "resources/shaders/bubble.fs");
 
     FileCheck(data_txt);
 
@@ -954,7 +960,14 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             screen.w - (panel_vertical_line.x + panel_vertical_line.width),
             screen.h - PANEL_PROGRESS_HEIGHT - PANEL_LINE_THICK
         };
-        DrawRectangleRec(panel_main, BASE_COLOR);
+        //DrawRectangleRec(panel_main, BASE_COLOR);
+        //float pad_panel_main = 7.5F;
+        //panel_main = {
+        //    panel_main.x + (pad_panel_main * 1),
+        //    panel_main.y,
+        //    panel_main.width - (pad_panel_main * 2),
+        //    panel_main.height
+        //};
 
         // PANEL PROGRESS
         panel_progress = {
@@ -2366,6 +2379,8 @@ void DrawMusicList(Rectangle& panel)
                         y_while_selected = 0;
                         delta_y_mouse_down = 0;
                         delta_y_while_released = 0;
+
+                        if (p->moving_save) if (Save()) TraceLog(LOG_INFO, "Saving New Arranging Playlists in data.txt");
                     
                     }
 
@@ -2485,6 +2500,14 @@ void DrawMainDisplay(Rectangle& panel_main)
     DrawTitleMP3(panel_title_display);
     EndScissorMode();
 
+    float panel_pad = panel_main.width * 0.01F;
+    Rectangle panel_display{
+        panel_main.x + (panel_pad * 1),
+        panel_main.y,
+        panel_main.width - (panel_pad * 2),
+        panel_main.height,
+    };
+
     font = &font_counter;
     Rectangle panel_counter_display{
         panel_title_display.x,
@@ -2602,8 +2625,8 @@ void DrawMainDisplay(Rectangle& panel_main)
         }
 
 
-        float bar_h = final_amplitude * panel_main.height * 0.65F;
-        float bar_w = panel_main.width / BUCKETS;
+        float bar_h = final_amplitude * panel_display.height * 0.65F;
+        float bar_w = panel_display.width / BUCKETS;
 
         float pad = bar_w * 0.1F;
         if (stronger.at(i) == true) pad = bar_w * 0.1F;
@@ -2612,8 +2635,8 @@ void DrawMainDisplay(Rectangle& panel_main)
         pad = bar_w * sqrtf(1 - final_amplitude) * 0.35F;
         float base_h = bar_w * 0.7F;
         Rectangle base = {
-            panel_main.x + (i * bar_w) + (pad * 1),
-            (panel_main.y + panel_main.height) - base_h * 1.5F,
+            panel_display.x + (i * bar_w) + (pad * 1),
+            (panel_display.y + panel_display.height) - base_h * 1.5F,
             bar_w - (pad * 2),
             base_h
         };
@@ -2624,7 +2647,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         //pad = bar_w * sqrtf(1 - final_amplitude);
 
         Rectangle bar = {
-            panel_main.x + (i * bar_w) + (pad * 1),
+            panel_display.x + (i * bar_w) + (pad * 1),
             base.y + (base.height * 0.5F) - bar_h,
             bar_w - (pad * 2),
             bar_h
@@ -2635,59 +2658,76 @@ void DrawMainDisplay(Rectangle& panel_main)
         float sat = 1.0F;
         float val = 1.0F;
         color = ColorFromHSV(hue * 360, sat, val);
-        DrawRectangleRounded(base, 0.8F, 10, color);
+        //DrawRectangleRounded(base, 0.8F, 10, color);
         //DrawCircle(base.x + (base.width * 0.5F), base.y + (base.height * 0.5F), bar_w * 0.5F, color);
 
         //DrawRectangleRec(bar, Fade(color, 0.8F))
         
-        Vector2 startPos = { bar.x + bar.width / 2, (bar.y + bar.height) };
-        Vector2 endPos = { bar.x + bar.width / 2, (bar.y + bar.height) - bar_h };
-        DrawLineEx(startPos, endPos, 5.0F * sqrt(final_amplitude) * 1.5F, color);
+        Vector2 startPos = { bar.x + bar.width / 2, (bar.y + bar.height) - bar_h };
+        Vector2 endPos = { bar.x + bar.width / 2, (bar.y + bar.height) };
+        float thick = 4.0F * sqrt(final_amplitude);
+        DrawLineEx(startPos, endPos, thick, color);
 
-        DrawCircleV({ bar.x + bar.width / 2, bar.y }, bar_w * sqrt(final_amplitude) * 1.5F, color);
+        Vector2 center_bins = { bar.x + bar.width / 2, bar.y };
+        float radius = bar_w * sqrt(final_amplitude) * 1.10F * 2;
+        //DrawCircleV(center_bins, radius, color);
+
+        // Maybe can used for toggle glow or bubble effect. not as default 
+        // DRAW BUBBLE USING SHADERS
+        radius = bar_w * sqrt(final_amplitude) * 1.25F * 2;
+        BeginShaderMode(p->bubble);
+        Texture2D bubble_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+        Vector2 bubble_pos = {
+            startPos.x - radius,
+            startPos.y - radius
+        };
+        float bubble_rotation = { 0 };
+        float bubble_scale = radius * 2;
+        DrawTextureEx(bubble_texture, bubble_pos, bubble_rotation, bubble_scale, Fade(RAYWHITE, 0.25F));
+        EndShaderMode();
+
+        // DRAW CIRCLE USING SHADERS
+        radius = bar_w * sqrt(final_amplitude) * 1.10F * 2;
+        BeginShaderMode(p->circle);
+        Texture2D texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+        //Rectangle rec = {
+        //    startPos.x - radius,
+        //    startPos.y - radius,
+        //    radius * 2,
+        //    radius * 2,
+        //};
+        //DrawRectangleRec(rec, color);
+        Vector2 position = {
+            startPos.x - radius,
+            startPos.y - radius
+        };
+        float rotation = { 0 };
+        float scale = radius * 2;
+        DrawTextureEx(texture, position, rotation, scale, color);
+
+        // base
+        //Rectangle rec = {
+        //    endPos.x - radius,
+        //    endPos.y - radius,
+        //    radius * 2,
+        //    radius * 2,
+        //};
+        //DrawRectangleRec(rec, color);
+        radius = radius * 0.75F;
+        scale = radius * 2;
+        Vector2 base_pos = {
+            endPos.x - radius,
+            endPos.y - radius
+        };
+        DrawTextureEx(texture, base_pos, rotation, scale, color);
+
+        EndShaderMode();
         
-        // FOR GLOWING, BUT MAYBE WILL BE DELETE CAUSE WILL BE USE SHADER
-        //float alpha = 0.0F;
-        //if (stronger.at(i) == true) alpha = 0.9F;
-        //else alpha = 0.6F;
-        //DrawRectangleRounded(bar, 0.7F, 10, Fade(color, alpha));
-
-
-       
-        //if (p->glow) {
-        //    float pad_light = bar_w * 0.1F;
-        //    Rectangle light = {
-        //        bar.x + (pad_light * 1),
-        //        bar.y + (pad_light * 2),
-        //        bar.width - (pad_light * 2),
-        //        bar.height - (pad_light * 4)
-        //    };
-        //    DrawRectangleRounded(light, 0.5F, 10, Fade(WHITE, 0.1F));
-        //    pad_light = bar_w * 0.2F;
-        //    light = {
-        //        bar.x + (pad_light * 1),
-        //        bar.y + (pad_light * 3),
-        //        bar.width - (pad_light * 2),
-        //        bar.height - (pad_light * 3)
-        //    };
-        //    DrawRectangleRounded(light, 0.5F, 10, Fade(WHITE, 0.2F));
-        //    float pad_base = base.width * 0.05F;
-        //    base = {
-        //        base.x + (pad_base * 1),
-        //        base.y + (pad_base * 1),
-        //        base.width - (pad_base * 2),
-        //        base.height - (pad_base * 2),
-        //    };
-        //    if (stronger.at(i) == true) alpha = 0.5F;
-        //    else alpha = 0.0F;
-        //    DrawRectangleRounded(base, 0.8F, 10, Fade(WHITE, alpha));
-        //}
-
 
         // TRY TO MAKE DRAW FFT FREQ DOMAIN IN ROTATION
         Vector2 center{ 
-            (panel_main.x + (panel_main.width * 0.5F)), 
-            (panel_main.y + (panel_main.height * 0.5F)) + 10
+            (panel_display.x + (panel_display.width * 0.5F)),
+            (panel_display.y + (panel_display.height * 0.5F)) + 10
         };
 
         float w = bar_w * 0.4F;
@@ -2704,8 +2744,8 @@ void DrawMainDisplay(Rectangle& panel_main)
 
     // Diffuser Center circle
     //Vector2 center{
-    //        (panel_main.x + (panel_main.width * 0.5F)),
-    //        (panel_main.y + (panel_main.height * 0.5F)) + 10
+    //        (panel_display.x + (panel_display.width * 0.5F)),
+    //        (panel_display.y + (panel_display.height * 0.5F)) + 10
     //};
     //DrawCircleV(center, 8, Fade(DARKGRAY, 0.5F));
     //DrawCircleV(center, 4, Fade(RAYWHITE, 0.8F));
