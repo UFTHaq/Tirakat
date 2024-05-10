@@ -2714,60 +2714,93 @@ void DrawMainDisplay(Rectangle& panel_main)
         // NEW FFT ROTATION STYLE, USE LINE AND SHADERS
         Vector2 center_panel_main{
             panel_display.x + (panel_display.width * 0.5F),
-            panel_display.y + (panel_display.height * 0.5F)
+            panel_display.y + (panel_display.height * 0.525F)
         };
 
-        float value = final_amplitude * panel_display.height * 0.35F;
-        //float value = sqrt(final_amplitude)*panel_display.height * 0.5F;
+        //float value = final_amplitude * panel_display.height * 0.45F;
+        float value = sqrt(final_amplitude)*panel_display.height * 0.4F;
         //float value = 10.0F;
         float angle = (360.0F / 50.0F) * i;
+        //float angle = 0.5F * (float)i;
+        //color = ColorFromHSV(angle, sat, val);
         Vector2 startPos_fft_rotation = center_panel_main;
-        Vector2 midPos_fft_rotation = {
-            startPos_fft_rotation.x + (sin(angle) * value * 0.5F),
-            startPos_fft_rotation.y + (cos(angle) * value * 0.5F)
-        };
+
         Vector2 endPos_fft_rotation = {
             startPos_fft_rotation.x + (sin(angle) * value),
             startPos_fft_rotation.y + (cos(angle) * value)
         };
-        //DrawLineEx(startPos_fft_rotation, endPos_fft_rotation, 5.0, color);
+
+        Vector2 Pos_40 = {
+            startPos_fft_rotation.x + (sin(angle) * value) * 0.4F,
+            startPos_fft_rotation.y + (cos(angle) * value) * 0.4F
+        };
+        Vector2 Pos_70 = {
+            startPos_fft_rotation.x + (sin(angle) * value) * 0.7F,
+            startPos_fft_rotation.y + (cos(angle) * value) * 0.7F
+        };
+        Vector2 Pos_90 = {
+            startPos_fft_rotation.x + (sin(angle) * value) * 0.9F,
+            startPos_fft_rotation.y + (cos(angle) * value) * 0.9F
+        };
+        Vector2 Pos_100 = {
+            startPos_fft_rotation.x + (sin(angle) * value) * 0.9F,
+            startPos_fft_rotation.y + (cos(angle) * value) * 0.9F
+        };
+        //DrawLineEx(startPos_fft_rotation, endPos_fft_rotation, 2.0, color);
         {
             //float radius = value * 0.25F;
             //float radius = final_amplitude * final_amplitude * 20;
             //float radius = sqrt(final_amplitude) * panel_display.height * 0.025F;
-            float radius = final_amplitude * panel_display.height * 0.025F;
-            float scale = radius * 2;
-            Vector2 base_pos_end = {
-                endPos_fft_rotation.x - radius,
-                endPos_fft_rotation.y - radius
-            };
-            Rectangle rec = {
-                base_pos_end.x,
-                base_pos_end.y,
-                radius,
-                radius
-            };
-            //DrawRectangleRec(rec, color);
-            DrawTextureEx(circle_texture, base_pos_end, rotation, scale, color);
+            //float radius = final_amplitude * panel_display.height * 0.025F;
+            //float radius = final_amplitude * panel_display.height * 0.1F;
+            //float scale = radius * 2;
+            //Vector2 base_pos_end = {
+            //    endPos_fft_rotation.x - radius,
+            //    endPos_fft_rotation.y - radius
+            //};
+            //DrawTextureEx(circle_texture, base_pos_end, rotation, scale, color);
 
-            //radius = sqrt(final_amplitude) * 15;
-            //scale = radius * 2;
-            //Vector2 base_pos_mid = {
-            //    midPos_fft_rotation.x - radius * 0.5,
-            //    midPos_fft_rotation.y - radius * 0.5
-            //};
-            //rec = {
-            //    base_pos_mid.x,
-            //    base_pos_mid.y,
-            //    radius,
-            //    radius
-            //};
-            //DrawRectangleRec(rec, color);
-            //DrawTextureEx(texture, base_pos_end, rotation, scale, color);
+            float radius_40 = sqrt(value) * 1.0F;
+            float scale = radius_40 * 2;
+            Vector2 base_40_pos = {
+                Pos_40.x - radius_40,
+                Pos_40.y - radius_40,
+            };
+            DrawTextureEx(circle_texture, base_40_pos, rotation, scale, color);
+            //DrawTextureEx(circle_texture, base_40_pos, rotation, scale, WHITE);
+
+            //float radius_70 = value * 0.05F;
+            float radius_70 = 2.50F;
+            scale = radius_70 * 2;
+            Vector2 base_70_pos = {
+                Pos_70.x - radius_70,
+                Pos_70.y - radius_70,
+            };
+            //DrawTextureEx(circle_texture, base_70_pos, rotation, scale, color);
+            DrawTextureEx(circle_texture, base_70_pos, rotation, scale, WHITE);
+
+            float radius_90 = value * 0.2F;
+            scale = radius_90 * 2;
+            Vector2 base_90_pos = {
+                Pos_90.x - radius_90,
+                Pos_90.y - radius_90,
+            };
+            //DrawTextureEx(circle_texture, base_90_pos, rotation, scale, color);
+
+            float radius_100 = sqrt(value) * 0.75F;
+            scale = radius_100 * 2;
+            Vector2 base_100_pos = {
+                Pos_100.x - radius_100,
+                Pos_100.y - radius_100,
+            };
+            DrawTextureEx(circle_texture, base_100_pos, rotation, scale, color);
+            //DrawTextureEx(circle_texture, base_100_pos, rotation, scale, WHITE);
+
 
         }
 
         EndShaderMode();
+        //DrawLineEx(startPos_fft_rotation, endPos_fft_rotation, 2.0, color);
 
     }
 
