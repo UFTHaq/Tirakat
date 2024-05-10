@@ -2689,57 +2689,86 @@ void DrawMainDisplay(Rectangle& panel_main)
         // DRAW CIRCLE USING SHADERS
         radius = bar_w * sqrt(final_amplitude) * 1.10F * 2;
         BeginShaderMode(p->circle);
-        Texture2D texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
-        //Rectangle rec = {
-        //    startPos.x - radius,
-        //    startPos.y - radius,
-        //    radius * 2,
-        //    radius * 2,
-        //};
-        //DrawRectangleRec(rec, color);
-        Vector2 position = {
+        Texture2D circle_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+
+        // TOP CIRCLE
+        Vector2 top_pos = {
             startPos.x - radius,
             startPos.y - radius
         };
         float rotation = { 0 };
         float scale = radius * 2;
-        DrawTextureEx(texture, position, rotation, scale, color);
+        DrawTextureEx(circle_texture, top_pos, rotation, scale, color);
 
-        // base
-        //Rectangle rec = {
-        //    endPos.x - radius,
-        //    endPos.y - radius,
-        //    radius * 2,
-        //    radius * 2,
-        //};
-        //DrawRectangleRec(rec, color);
+        // BASE CIRCLE
         radius = radius * 0.75F;
         scale = radius * 2;
         Vector2 base_pos = {
             endPos.x - radius,
             endPos.y - radius
         };
-        DrawTextureEx(texture, base_pos, rotation, scale, color);
+        DrawTextureEx(circle_texture, base_pos, rotation, scale, color);
 
-        EndShaderMode();
         
 
-        // TRY TO MAKE DRAW FFT FREQ DOMAIN IN ROTATION
-        Vector2 center{ 
-            (panel_display.x + (panel_display.width * 0.5F)),
-            (panel_display.y + (panel_display.height * 0.5F)) + 10
+        // NEW FFT ROTATION STYLE, USE LINE AND SHADERS
+        Vector2 center_panel_main{
+            panel_display.x + (panel_display.width * 0.5F),
+            panel_display.y + (panel_display.height * 0.5F)
         };
 
-        float w = bar_w * 0.4F;
-        //if (stronger.at(i) == true) w = bar_w * 0.4F;
-        //else w = bar_w * 0.2F;
-        //float h = sqrtf(bar_h * rotation_h_coef) * 10;
-        float h = bar_h * rotation_h_coef * 0.8F;
-        Rectangle small_bar_rect = { center.x, center.y, w, h };
+        float value = final_amplitude * panel_display.height * 0.35F;
+        //float value = sqrt(final_amplitude)*panel_display.height * 0.5F;
+        //float value = 10.0F;
         float angle = (360.0F / 50.0F) * i;
-        color = ColorFromHSV(hue * 360 + (angle), sat, val);
-        //DrawRectanglePro(small_bar_rect, { 0,0 }, angle, Fade(color, 0.7F));
-        //DrawRectanglePro(small_bar_rect, {w/2,0}, angle, Fade(color, 0.7F));
+        Vector2 startPos_fft_rotation = center_panel_main;
+        Vector2 midPos_fft_rotation = {
+            startPos_fft_rotation.x + (sin(angle) * value * 0.5F),
+            startPos_fft_rotation.y + (cos(angle) * value * 0.5F)
+        };
+        Vector2 endPos_fft_rotation = {
+            startPos_fft_rotation.x + (sin(angle) * value),
+            startPos_fft_rotation.y + (cos(angle) * value)
+        };
+        //DrawLineEx(startPos_fft_rotation, endPos_fft_rotation, 5.0, color);
+        {
+            //float radius = value * 0.25F;
+            //float radius = final_amplitude * final_amplitude * 20;
+            //float radius = sqrt(final_amplitude) * panel_display.height * 0.025F;
+            float radius = final_amplitude * panel_display.height * 0.025F;
+            float scale = radius * 2;
+            Vector2 base_pos_end = {
+                endPos_fft_rotation.x - radius,
+                endPos_fft_rotation.y - radius
+            };
+            Rectangle rec = {
+                base_pos_end.x,
+                base_pos_end.y,
+                radius,
+                radius
+            };
+            //DrawRectangleRec(rec, color);
+            DrawTextureEx(circle_texture, base_pos_end, rotation, scale, color);
+
+            //radius = sqrt(final_amplitude) * 15;
+            //scale = radius * 2;
+            //Vector2 base_pos_mid = {
+            //    midPos_fft_rotation.x - radius * 0.5,
+            //    midPos_fft_rotation.y - radius * 0.5
+            //};
+            //rec = {
+            //    base_pos_mid.x,
+            //    base_pos_mid.y,
+            //    radius,
+            //    radius
+            //};
+            //DrawRectangleRec(rec, color);
+            //DrawTextureEx(texture, base_pos_end, rotation, scale, color);
+
+        }
+
+        EndShaderMode();
+
     }
 
     // Diffuser Center circle
