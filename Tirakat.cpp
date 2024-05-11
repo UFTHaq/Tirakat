@@ -4,11 +4,9 @@
 // MAYBE NEXT BIG TODO: ADD VISUALIZATION ?
 // 1. FFT (FREQ DOMAIN) SIGNAL STYLE - DONE
 // 2. TIME DOMAIN SIGNAL STYLE - DONE
-// 3. ADD Functionality to can add multiple music at one time
+// 3. ADD Functionality to can add multiple music at one time - DONE
 
 // SMALL THINGS TODO:
-// 1. There is little bug, where the amplitude of FFT Display is slowly get more smaller, i think because its comparing with the new Data with Peak.
-//    Maybe need to reset it after some interval time maybe: 15s, 20s, 30s.
 // 2. Seringkali FFT tidak tampil, mungkin attach terjadi ketika music belum siap, jadi perlu while loop dulu sampai siap lalu lanjut ke attach music.
 
 #include <iostream>
@@ -56,7 +54,6 @@
 #define PANEL_PROGRESS_HEIGHT PANEL_BOTTOM
 #define PANEL_PROGRESS_HEIGHT_FULLSCREEN_OFFSCREEN 5.0F
 #define PANEL_LINE_THICK 4.0F // 4.0F
-#define DOWNSAMPLING 1400
 
 #define BASE_COLOR                  Color{  20,  20,  20, 255 }
 #define PANEL_COLOR                 Color{  30,  30,  30, 255 }
@@ -95,10 +92,10 @@ enum Toggle {
 };
 
 enum MODE {
-    NATURAL = 1,
-    EXPONENTIAL,
-    MULTI_PEAK,
-    MAX_PEAK
+    MODE_NATURAL = 1,
+    MODE_EXPONENTIAL,
+    MODE_MULTI_PEAK,
+    MODE_MAX_PEAK
 };
 
 
@@ -117,7 +114,7 @@ struct Plug {
     bool repeat{ OFF };
     int mouse_cursor{};
     bool glow{ false };
-    int mode{ MULTI_PEAK };
+    int mode{ MODE_MULTI_PEAK };
     bool moving_save{ false };
     Shader circle{};
     Shader bubble{};
@@ -287,7 +284,7 @@ void LoadMP3();
 
 void DrawMainPage(ScreenSize screen, int& retFlag);
 
-void DrawProgessTimeDomain(Rectangle& panel, float progress_w);
+void DrawProgressTimeDomain(Rectangle& panel, float progress_w);
 
 void DrawMedia(Rectangle& panel_media);
 
@@ -422,7 +419,7 @@ int main()
     ScreenSize screen{ 1000, 580 };
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_ALWAYS_RUN);
-    //SetConfigFlags(FLAG_MSAA_4X_HINT);
+    SetConfigFlags(FLAG_MSAA_4X_HINT);
 
     InitWindow((int)screen.w, (int)screen.h, "Tirakat");
     InitAudioDevice();
@@ -503,7 +500,7 @@ int main()
     make_bins();
 
     while (!WindowShouldClose()) {
-        SetWindowMinSize(700, 400);
+        SetWindowMinSize(800, 450);
 
         if (zero_data == true) {
             p->page = PAGE_DRAG_DROP;
@@ -545,11 +542,14 @@ int main()
             break;
         }
 
-        DrawFPS(screen.w - 90, 10);
+        DrawFPS(screen.w - 83, 10);
 
         EndDrawing();
     }
 
+    UnloadShader(p->circle);
+    UnloadShader(p->bubble);
+    
     cleanup();
     CloseAudioDevice();
     CloseWindow();
@@ -961,14 +961,6 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             screen.w - (panel_vertical_line.x + panel_vertical_line.width),
             screen.h - PANEL_PROGRESS_HEIGHT - PANEL_LINE_THICK
         };
-        //DrawRectangleRec(panel_main, BASE_COLOR);
-        //float pad_panel_main = 7.5F;
-        //panel_main = {
-        //    panel_main.x + (pad_panel_main * 1),
-        //    panel_main.y,
-        //    panel_main.width - (pad_panel_main * 2),
-        //    panel_main.height
-        //};
 
         // PANEL PROGRESS
         panel_progress = {
@@ -1015,367 +1007,6 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
 
 
 
-    //    // PANEL LEFT
-    //    panel_left = {
-    //        0,
-    //        0,
-    //        PANEL_LEFT_WIDTH,
-    //        (screen_h - PANEL_LINE_THICK - PANEL_INFO_HEIGHT - PANEL_PROGRESS_HEIGHT)
-    //    };
-    //    DrawRectangleRec(panel_left, PANEL_COLOR);
-
-    //    // MAIN PANEL
-    //    panel_main = {
-    //        panel_left.x + panel_left.width,
-    //        0,
-    //        screen_w - panel_left.width,
-    //        panel_left.height
-    //    };
-    //    {
-    //        float padding = 20.0F;
-
-    //        font = &font_s_semibold;
-    //        Rectangle title_display_rect{
-    //            panel_main.x,
-    //            panel_main.y + 30,
-    //            panel_main.width,
-    //            50
-    //        };
-    //        //DrawRectangleRec(title_display_rect, RED);
-    //        BeginScissorMode(
-    //            static_cast<int>(title_display_rect.x + (padding * 1)),
-    //            static_cast<int>(title_display_rect.y + (padding * 0)),
-    //            static_cast<int>(title_display_rect.width - (padding * 2)),
-    //            static_cast<int>(title_display_rect.height - (padding * 0))
-    //        );
-    //        DrawTitleMP3(title_display_rect);
-    //        EndScissorMode();
-
-    //        font = &font_counter;
-    //        Rectangle counter_display_rect{
-    //            title_display_rect.x,
-    //            title_display_rect.y + 50,
-    //            title_display_rect.width,
-    //            50
-    //        };
-    //        //DrawRectangleRec(counter_display_rect, GOLD);
-    //        DrawCounter(counter_display_rect);
-    //    }
-
-    //    panel_horizontal_line = {
-    //        0,
-    //        panel_left.y + panel_left.height,
-    //        screen_w,
-    //        PANEL_LINE_THICK
-    //    };
-    //    DrawRectangleRec(panel_horizontal_line, PANEL_LINE_COLOR);
-
-    //    panel_bottom = {
-    //        0,
-    //        panel_horizontal_line.y + panel_horizontal_line.height,
-    //        screen_w,
-    //        PANEL_INFO_HEIGHT
-    //    };
-
-    //    panel_vertical_line = {
-    //        PANEL_LEFT_WIDTH - PANEL_LINE_THICK,
-    //        0,
-    //        PANEL_LINE_THICK,
-    //        screen_h - PANEL_PROGRESS_HEIGHT
-    //    };
-    //    DrawRectangleRec(panel_vertical_line, PANEL_LINE_COLOR);
-
-    //    // DURATION PANEL
-    //    panel_duration = {
-    //        panel_bottom.x,
-    //        panel_bottom.y,
-    //        PANEL_LEFT_WIDTH - PANEL_LINE_THICK,
-    //        panel_bottom.height
-    //    };
-    //    DrawRectangleRec(panel_duration, PANEL_COLOR2);
-    //    font = &font_number;
-    //    DrawDuration(panel_duration);
-
-    //    panel_media = {
-    //        PANEL_LEFT_WIDTH,
-    //        panel_bottom.y,
-    //        panel_bottom.width - PANEL_LEFT_WIDTH,
-    //        panel_bottom.height
-    //    };
-    //    DrawRectangleRec(panel_media, PANEL_COLOR);
-
-    //    panel_progress = {
-    //        PANEL_LEFT_WIDTH,
-    //        screen_h - PANEL_PROGRESS_HEIGHT,
-    //        screen_w - PANEL_LEFT_WIDTH,
-    //        PANEL_PROGRESS_HEIGHT
-    //    };
-
-    //    DrawMusicList(panel_left);
-
-    //}
-
-
-    //if (p->mouse_onscreen == true) {
-
-    //    // MULTIMEDIA PANEL
-
-    //    // PLAY BUTTON
-    //    float button_w = panel_media.height;
-    //    float pad = 10.0F;
-    //    //float offset_y = 2.0F;
-    //    Rectangle play_panel = {
-    //        panel_media.x,
-    //        panel_media.y,
-    //        button_w,
-    //        button_w
-    //    };
-    //    Rectangle play_rect{
-    //        play_panel.x + (pad * 1),
-    //        play_panel.y + (pad * 1),
-    //        play_panel.width - (pad * 2),
-    //        play_panel.height - (pad * 2),
-    //    };
-    //    //DrawRectangleRec(play_rect, RED);
-    //    DrawPlayPause(play_rect, play_panel);
-
-    //    // VOLUME BUTTON
-    //    static bool HUD_toggle = false;
-    //    float volume_slider_length_base = 230.F;
-    //    Rectangle volume_base_panel = {
-    //        play_panel.x + button_w,
-    //        play_panel.y,
-    //        button_w + volume_slider_length_base ,
-    //        button_w
-    //    };
-    //    //DrawRectangleRec(volume_base_panel, DARKGRAY);
-
-    //    Rectangle volume_panel{
-    //        volume_base_panel.x,
-    //        volume_base_panel.y,
-    //        button_w,
-    //        button_w
-    //    };
-    //    //DrawRectangleRec(volume_panel, DARKBLUE);
-
-    //    pad = 11.0F;
-    //    Rectangle volume_icon_rect{
-    //        volume_base_panel.x + (pad * 1),
-    //        volume_base_panel.y + (pad * 1),
-    //        button_w - (pad * 2),
-    //        button_w - (pad * 2),
-    //    };
-    //    //DrawRectangleRec(volume_icon_rect, RED);
-
-    //    Color icon_color = GRAY;
-    //    float volume = GetMasterVolume();
-    //    if (CheckCollisionPointRec(mouse_position, volume_panel)) {
-    //        icon_color = RAYWHITE;
-    //        HUD_toggle = true;
-    //        if (CheckCollisionPointRec(mouse_position, volume_panel) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-    //            if (volume > 0) {
-    //                p->last_volume = volume;
-    //                volume = 0;
-    //            }
-    //            else {
-    //                volume = p->last_volume;
-    //            }
-    //            SetMasterVolume(volume);
-    //        }
-    //    }
-
-    //    static size_t icon_index = 0;
-    //    if (p->volume_mute) {
-    //        icon_index = 0;
-    //        SetMasterVolume(0.0F);
-    //    }
-    //    else {
-
-    //        if (volume == 0.0F) {
-    //            p->volume_mute;
-    //            icon_index = 0;
-    //        }
-    //        else if (volume < 0.5F) {
-    //            icon_index = 1;
-    //        }
-    //        else {
-    //            icon_index = 2;
-    //        }
-    //    }
-
-    //    float icon_size = 100.0F;
-    //    {
-    //        Rectangle dest = volume_icon_rect;
-    //        Rectangle source{ icon_index * icon_size, 0, icon_size, icon_size };
-    //        DrawTexturePro(VOLUME_TEX, source, dest, { 0,0 }, 0, icon_color);
-    //    }
-
-    //    // VOLUME SLIDER 2.0
-    //    static bool drag_volume = false;
-    //    if (HUD_toggle) {
-    //        // make new rect
-    //        Rectangle volume_slider_panel{
-    //            volume_panel.x + volume_panel.width,
-    //            volume_panel.y,
-    //            volume_slider_length_base,
-    //            volume_panel.height
-    //        };
-    //        //DrawRectangleRec(volume_slider_panel, DARKBROWN);
-
-    //        // SLIDER DRAW - START
-    //        int volume_slider_w = 200;
-    //        float volume_slider_h = button_w * 0.12F;
-    //        float vol_ratio = static_cast<float>(volume_slider_w) / 1;
-    //        float vol_length = vol_ratio * GetMasterVolume();
-
-    //        // OUTLINE SLIDER
-    //        Rectangle volume_slider_outer{
-    //            volume_slider_panel.x + 15,
-    //            volume_slider_panel.y + (volume_slider_panel.height - volume_slider_h) / 2,
-    //            static_cast<float>(volume_slider_w),
-    //            volume_slider_h
-    //        };
-    //        DrawRectangleRounded(volume_slider_outer, 0.7F, 5, BASE_COLOR);
-    //        DrawRectangleRoundedLines(volume_slider_outer, 0.7F, 5, 3.0F, BASE_COLOR);
-
-    //        Rectangle volume_slider{
-    //            volume_slider_panel.x + 15,
-    //            volume_slider_panel.y + (volume_slider_panel.height - volume_slider_h) / 2,
-    //            vol_length,
-    //            volume_slider_h
-    //        };
-    //        DrawRectangleRounded(volume_slider, 0.7F, 5, GRAY);
-
-    //        // DRAW CIRCLE
-    //        int circle_center_x = static_cast<int>(volume_slider.x) + static_cast<int>(volume_slider.width);
-    //        int circle_center_y = static_cast<int>(volume_slider.y) + static_cast<int>(volume_slider.height / 2) + 1;
-    //        float radius = 6.0F;
-    //        DrawCircle(circle_center_x, circle_center_y, radius + 5, BASE_COLOR);
-    //        DrawCircle(circle_center_x, circle_center_y, radius, LIGHTGRAY);
-    //        // SLIDER DRAW - END
-
-
-    //        // DRAG
-    //        bool inSlider = (CheckCollisionPointRec(mouse_position, volume_slider_panel));
-    //        if (inSlider) {
-    //            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-    //                vol_length = mouse_position.x - volume_slider.x;
-    //                if (vol_length < 0) vol_length = 0;
-    //                if (vol_length > volume_slider_w) vol_length = static_cast<float>(volume_slider_w);
-    //                volume = vol_length / vol_ratio;
-    //                SetMasterVolume(volume);
-
-    //                std::cout << vol_length << " : " << volume << std::endl;
-
-    //            }
-    //            else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-    //                if (p->dragging != DRAG_MUSIC_PROGRESS) {
-    //                    //drag_volume = true;
-    //                    p->dragging = DRAG_VOLUME;
-    //                }
-    //            }
-    //        }
-
-    //        //if (drag_volume) {
-    //        if (p->dragging == DRAG_VOLUME) {
-    //            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-    //                vol_length = mouse_position.x - volume_slider.x;
-    //                if (vol_length < 0) vol_length = 0;
-    //                if (vol_length > 200) vol_length = 200;
-    //                volume = vol_length / vol_ratio;
-    //                SetMasterVolume(volume);
-
-    //                std::cout << vol_length << " : " << volume << std::endl;
-    //            }
-    //            else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-    //                //drag_volume = false;
-    //                p->dragging = DRAG_RELEASE;
-    //            }
-    //        }
-
-    //        // MOUSE WHEEL INPUT
-    //        float mouse_wheel_step = 0.05F;
-    //        float wheel_delta = GetMouseWheelMove();
-    //        volume += wheel_delta * mouse_wheel_step;
-    //        if (volume < 0) volume = 0;
-    //        if (volume > 1) volume = 1;
-
-    //        SetMasterVolume(volume);
-
-    //    }
-
-    //    // OUTSIDE OF HUD
-    //    bool outVolumeBase = !(CheckCollisionPointRec(mouse_position, volume_base_panel));
-    //    if (outVolumeBase) {
-    //        HUD_toggle = false;
-    //    }
-
-    //    //if (drag_volume) {
-    //    if (p->dragging == DRAG_VOLUME) {
-    //        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && outVolumeBase) {
-    //            HUD_toggle = true;
-    //        }
-    //        else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && outVolumeBase) {
-    //            HUD_toggle = false;
-    //            //drag_volume = false;
-    //            p->dragging = DRAG_RELEASE;
-    //        }
-    //    }
-
-    //    // FULLSCREEN BUTTON
-    //    float pad = 6.0F;
-    //    Rectangle fullscreen_panel{
-    //        panel_bottom.width - button_w,
-    //        panel_bottom.y,
-    //        button_w,
-    //        button_w
-    //    };
-
-    //    Rectangle fullscreen_rect{
-    //        fullscreen_panel.x + (pad * 1),
-    //        fullscreen_panel.y + (pad * 1),
-    //        fullscreen_panel.width - (pad * 2),
-    //        fullscreen_panel.height - (pad * 2),
-    //    };
-    //    //DrawRectangleRec(fullscreen_rect, RED);
-
-    //    if (p->fullscreen == false) {
-    //        if (CheckCollisionPointRec(mouse_position, fullscreen_rect)) {
-    //            p->icon_fullscreen_index = 1;
-    //            icon_color = RAYWHITE;
-    //            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-    //                p->fullscreen = true;
-    //                setting_on = OFF;
-    //            }
-    //        }
-    //        else {
-    //            p->icon_fullscreen_index = 0;
-    //            icon_color = GRAY;
-    //        }
-    //    }
-    //    else {
-    //        if (CheckCollisionPointRec(mouse_position, fullscreen_rect)) {
-    //            p->icon_fullscreen_index = 3;
-    //            icon_color = RAYWHITE;
-    //            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-    //                p->fullscreen = false;
-    //                setting_on = OFF;
-    //            }
-    //        }
-    //        else {
-    //            p->icon_fullscreen_index = 2;
-    //            icon_color = GRAY;
-    //        }
-    //    }
-
-    //    {
-    //        float icon_size = 100.0F;
-    //        Rectangle dest = fullscreen_rect;
-    //        Rectangle source{ p->icon_fullscreen_index * icon_size, 0, icon_size, icon_size };
-    //        DrawTexturePro(FULLSCREEN_TEX, source, dest, { 0,0 }, 0, icon_color);
-    //    }
-
-    //}
 
     // SETTING PANEL
     float button_w = panel_media.height;
@@ -1890,19 +1521,26 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
     //DrawMusicProgress(panel_progress, music_volume);
 }
 
-void DrawProgessTimeDomain(Rectangle& panel, float progress_w)
+void DrawProgressTimeDomain(Rectangle& panel, float progress_w)
 {
     float progress = progress_w + panel.x;
-    Color color = GRAY;
+    Color color = LIGHTGRAY;
     float alpha = 0.5F;
 
-    // DRAWGRAYLINE
-    DrawLine(
-        (int)(panel.x),
-        (int)(panel.y + (panel.height * 0.5F)),
-        (int)(panel.x + panel.width),
-        (int)(panel.y + (panel.height * 0.5F)),
+    // DRAW GRAY LINE
+    DrawLineEx(
+        { panel.x, panel.y + (panel.height * 0.5F) },
+        { panel.x + panel.width, panel.y + (panel.height * 0.5F) },
+        2.0F,
         Fade(color, alpha)
+    );
+
+    // DRAW LINE
+    DrawLineEx(
+        { panel.x, panel.y + (panel.height * 0.5F) },
+        { progress - 0.5F, panel.y + (panel.height * 0.5F) },
+        2.0F,
+        { 225, 225, 225, 255 }
     );
 
     float segments = panel.width / (float)time_domain_signal.size();
@@ -1915,25 +1553,16 @@ void DrawProgessTimeDomain(Rectangle& panel, float progress_w)
         float y2 = center - (-time_domain_signal.at(i)) * panel.height * 0.5F;
     
         if (x1 < progress) { 
-            color = RAYWHITE; 
+            color = { 225, 225, 225, 255 };
             alpha = 1.0F;
         }
         else {
-            color = GRAY;
+            color = DARKGRAY;
             alpha = 0.8F;
         }
     
-        //DrawLine(x1, y1, x2, y2, Fade(color, alpha));
         DrawLineEx({ x1,y1 }, { x2,y2 }, 1.75F, Fade(color, alpha));
     }
-
-    // DRAWBLUELINE
-    DrawLineEx(
-        { panel.x, panel.y + (panel.height * 0.5F) },
-        { progress - 0.5F, panel.y + (panel.height * 0.5F) },
-        1.0F,
-        RAYWHITE
-    );
 
     if (CheckCollisionPointRec(mouse_position, panel)) p->mouse_cursor = MOUSE_CURSOR_POINTING_HAND;
     else p->mouse_cursor = MOUSE_CURSOR_DEFAULT;
@@ -2216,9 +1845,9 @@ void DrawMusicList(Rectangle& panel)
     float move_info_w = content_boundary.height;
     float move_info_h = move_info_w;
     Rectangle move_info{
-        panel_list_boundary.x + panel_list_boundary.width - move_info_w,
+        panel_list_boundary.x + panel_list_boundary.width - (move_info_w * 1.5F),
         panel_list_boundary.y + (content_panel_pad * 1),
-        move_info_w,
+        (move_info_w * 1.5F) - (content_panel_pad * 1),
         move_info_h - (content_panel_pad * 2)
     };
 
@@ -2239,11 +1868,17 @@ void DrawMusicList(Rectangle& panel)
 
         Color color_content = CONTENT_COLOR;
         Color color_font = RAYWHITE;
+
         if (CheckCollisionPointRec(mouse_position, panel_list_boundary)) {
+
+            static bool clicked_in_moving_boundary{};
+            static bool hold{ false };  // LITTLE BUG OF HOLD WHENEVER RELEASE THE BUTTON, NEEDS TO MAKE IT FALSE, TO MAKE COLOR HOVER WORKS
+            static std::chrono::time_point<std::chrono::steady_clock> content_press_start{};
+            int double_click_threshold = 200;
 
             if (p->dragging == DRAG_RELEASE) {
                 if (CheckCollisionPointRec(mouse_position, content)) {
-                    color_content = DARKGRAY;
+                    if (!hold) color_content = DARKGRAY;
 
                     static bool double_click_detected{ false };
                     static clock_t last_click_time{ 0 };
@@ -2252,7 +1887,7 @@ void DrawMusicList(Rectangle& panel)
                         clock_t current_time = clock();
                         double time_difference = difftime(current_time, last_click_time);
 
-                        if (time_difference < 250 && !double_click_detected) {
+                        if (time_difference < double_click_threshold && !double_click_detected) {
                             double_click_detected = true;
 
                             DetachAudioStreamProcessor(music.stream, callback);
@@ -2280,7 +1915,6 @@ void DrawMusicList(Rectangle& panel)
                     }
                 }
 
-                static bool clicked_in_moving_boundary{};
                 if (CheckCollisionPointRec(mouse_position, moving_boundary)) {
 
                     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -2290,50 +1924,67 @@ void DrawMusicList(Rectangle& panel)
                             selected_data = data.at(selected_index);
                             y_while_selected = content.y + (content.height * 0.5F) + content_scroll;
                             clicked_in_moving_boundary = true;
+
+                            content_press_start = std::chrono::steady_clock::now();
                         }
                     }
                     else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && clicked_in_moving_boundary) {
-                        if (selected_index == i) {
-                            color_content = ORANGE;
-                            //color_font = BLACK;
+                        if (hold == false) {
+                            auto current_time = std::chrono::steady_clock::now();
+                            auto elapsed_time = current_time - content_press_start;
+                            auto miliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed_time).count();
+
+                            if (miliseconds > double_click_threshold) hold = true;
                         }
 
-                        delta_y_mouse_down = (y_while_selected - content_scroll) - mouse_position.y;
-                        int moving = int(delta_y_mouse_down / content_boundary.height);
+                        if (hold == true) {
 
-                        std::string text = std::to_string(moving);
-                        float font_size = content.height * 0.7F;
-                        Font font = font_number;
-                        Vector2 text_measure = MeasureTextEx(font, text.c_str(), font_size, 0);
-                        Vector2 text_coor = {
-                            move_info.x + (move_info.width - text_measure.x) / 2,
-                            move_info.y + (move_info.height - text_measure.y) / 2
-                        };
-
-                        float line_y{};
-                        if (moving > 0) {
-                            DrawRectangleRec(move_info, Fade(RAYWHITE, 0.2F));
-                            DrawTextEx(font, text.c_str(), text_coor, font_size, 0, BLACK);
-                            line_y = (y_while_selected - content_scroll) - (content_boundary.height * 0.5F) - (moving * content_boundary.height);
-
-                        }
-                        else if (moving < 0) {
-                            DrawRectangleRec(move_info, Fade(RAYWHITE, 0.2F));
-                            DrawTextEx(font, text.c_str(), text_coor, font_size, 0, BLACK);
-                            line_y = (y_while_selected - content_scroll) + (content_boundary.height * 0.5F) - (moving * content_boundary.height);
-
-                        }
-                        Vector2 start = { content.x, line_y };
-                        Vector2 end = { content.x + content.width, line_y };
-                        DrawLineEx(start, end, 2.0, WHITE);
-
-                        if (scrollable) {
-
-                            if ((mouse_position.y < panel_list_boundary.height * 0.2F) && (content_scroll > min_scroll)) {
-                                content_velocity += 2;
+                            if (selected_index == i) {
+                                color_content = ORANGE;
                             }
-                            else if ((mouse_position.y > panel_list_boundary.height * 0.8F) && (content_scroll < max_scroll)) {
-                                content_velocity -= 2;
+
+                            delta_y_mouse_down = (y_while_selected - content_scroll) - mouse_position.y;
+                            int moving = int(delta_y_mouse_down / content_boundary.height);
+
+                            std::string text = std::to_string(moving);
+                            float font_size = content.height * 0.65F;
+                            //Font font = font_number;
+                            Font font = font_counter;
+                            Vector2 text_measure = MeasureTextEx(font, text.c_str(), font_size, 0);
+                            Vector2 text_coor = {
+                                move_info.x + (move_info.width - text_measure.x) / 2,
+                                move_info.y + (move_info.height - text_measure.y) / 2
+                            };
+
+                            float line_y{};
+                            if (moving > 0) {
+                                //DrawRectangleRec(move_info, Fade(RAYWHITE, 0.1F));
+                                DrawRectangleRounded(move_info, 0.25, 10, Fade(RAYWHITE, 0.1F));
+                                DrawTextEx(font, text.c_str(), text_coor, font_size, 0, BLACK);
+                                line_y = (y_while_selected - content_scroll) - (content_boundary.height * 0.5F) - (moving * content_boundary.height);
+
+                            }
+                            else if (moving < 0) {
+                                //DrawRectangleRec(move_info, Fade(RAYWHITE, 0.1F));
+                                DrawRectangleRounded(move_info, 0.25, 10, Fade(RAYWHITE, 0.1F));
+                                DrawTextEx(font, text.c_str(), text_coor, font_size, 0, BLACK);
+                                line_y = (y_while_selected - content_scroll) + (content_boundary.height * 0.5F) - (moving * content_boundary.height);
+
+                            }
+                            Vector2 start = { content.x + (content.width * 0.05F), line_y };
+                            Vector2 end = { content.x + content.width - (content.width * 0.05F), line_y };
+                            DrawLineEx(start, end, 2.0, WHITE);
+
+                            if (scrollable) {
+
+                                float auto_scroll_coef = 0.075F;
+                                if ((mouse_position.y < panel_list_boundary.height * (auto_scroll_coef)) && (content_scroll > min_scroll)) {
+                                    content_velocity += 1;
+                                }
+                                else if ((mouse_position.y > panel_list_boundary.height * (1 - auto_scroll_coef)) && (content_scroll < max_scroll)) {
+                                    content_velocity -= 1;
+                                }
+
                             }
 
                         }
@@ -2341,6 +1992,7 @@ void DrawMusicList(Rectangle& panel)
                     }
                     else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                         clicked_in_moving_boundary = false;
+                        hold = false;
                         delta_y_while_released = delta_y_mouse_down;
 
                         if (std::abs(int(delta_y_while_released / content_boundary.height)) == 0) {
@@ -2521,16 +2173,16 @@ void DrawMainDisplay(Rectangle& panel_main)
 
 
     if (IsKeyPressed(KEY_ONE)) {
-        p->mode = NATURAL;
+        p->mode = MODE_NATURAL;
     }
     else if (IsKeyPressed(KEY_TWO)) {
-        p->mode = EXPONENTIAL;
+        p->mode = MODE_EXPONENTIAL;
     }
     else if (IsKeyPressed(KEY_THREE)) {
-        p->mode = MULTI_PEAK;
+        p->mode = MODE_MULTI_PEAK;
     }
     else if (IsKeyPressed(KEY_FOUR)) {
-        p->mode = MAX_PEAK;
+        p->mode = MODE_MAX_PEAK;
     }
     else if (IsKeyPressed(KEY_G)) {
         p->glow = !p->glow;
@@ -2601,59 +2253,40 @@ void DrawMainDisplay(Rectangle& panel_main)
     for (int i = 0; i < BUCKETS; i++) {
         float final_amplitude = smoothedAmplitude.at(i);
 
-        if (final_amplitude > Peak.at(i).amplitude * 0.15F) stronger.at(i) = true;
-        else stronger.at(i) = false;
-
-
-        float rotation_h_coef{};
         switch (p->mode)
         {
-        case NATURAL:
+        case MODE_NATURAL:
             final_amplitude = natural_scale(final_amplitude, 0.02F);
-            rotation_h_coef = 0.6F;
             break;
-        case EXPONENTIAL:
-            final_amplitude = exponential_scale(final_amplitude, 0.6F);
-            rotation_h_coef = 0.9F;
+        case MODE_EXPONENTIAL:
+            final_amplitude = exponential_scale(final_amplitude, 0.5F);
             break;
-        case MULTI_PEAK:
-            final_amplitude = multi_peak_scale(final_amplitude, i, 1.20F, Peak);
-            rotation_h_coef = 0.9F;
+        case MODE_MULTI_PEAK:
+            final_amplitude = multi_peak_scale(final_amplitude, i, 1.0F, Peak);
             break;
-        case MAX_PEAK:
+        case MODE_MAX_PEAK:
             final_amplitude = max_peak_scale(final_amplitude, maxAmplitude, 0.9F);
-            rotation_h_coef = 0.9F;
             break;
         default:
             break;
         }
 
-
         float bar_h = final_amplitude * panel_display.height * 0.65F;
         float bar_w = panel_display.width / BUCKETS;
-
-        float pad = bar_w * 0.1F;
-        if (stronger.at(i) == true) pad = bar_w * 0.1F;
-        else pad = bar_w * 0.25F;
 
         pad = bar_w * sqrtf(1 - final_amplitude) * 0.35F;
         float base_h = bar_w * 0.7F;
         Rectangle base = {
-            panel_display.x + (i * bar_w) + (pad * 1),
+            panel_display.x + (i * bar_w),
             (panel_display.y + panel_display.height) - base_h * 1.5F,
-            bar_w - (pad * 2),
+            bar_w,
             base_h
         };
 
-        if (stronger.at(i) == true) pad = bar_w * 0.25F;
-        else pad = bar_w * 0.35F;
-
-        //pad = bar_w * sqrtf(1 - final_amplitude);
-
         Rectangle bar = {
-            panel_display.x + (i * bar_w) + (pad * 1),
+            panel_display.x + (i * bar_w),
             base.y + (base.height * 0.5F) - bar_h,
-            bar_w - (pad * 2),
+            bar_w,
             bar_h
         };
 
@@ -2662,33 +2295,31 @@ void DrawMainDisplay(Rectangle& panel_main)
         float sat = 1.0F;
         float val = 1.0F;
         color = ColorFromHSV(hue * 360, sat, val);
-        //DrawRectangleRounded(base, 0.8F, 10, color);
-        //DrawCircle(base.x + (base.width * 0.5F), base.y + (base.height * 0.5F), bar_w * 0.5F, color);
 
-        //DrawRectangleRec(bar, Fade(color, 0.8F))
         
         Vector2 startPos = { bar.x + bar.width / 2, (bar.y + bar.height) - bar_h };
         Vector2 endPos = { bar.x + bar.width / 2, (bar.y + bar.height) };
-        float thick = 4.0F * sqrt(final_amplitude);
-        //DrawLineEx(startPos, endPos, thick, color);
+        float thick = 4.0F * sqrt(final_amplitude) * (bar_w * 0.10F);
+        DrawLineEx(startPos, endPos, thick, color);
 
         Vector2 center_bins = { bar.x + bar.width / 2, bar.y };
         float radius = bar_w * sqrt(final_amplitude) * 1.10F * 2;
-        //DrawCircleV(center_bins, radius, color);
 
         // Maybe can used for toggle glow or bubble effect. not as default 
-        // DRAW BUBBLE USING SHADERS
-        radius = bar_w * sqrt(final_amplitude) * 1.25F * 2;
-        BeginShaderMode(p->bubble);
-        Texture2D bubble_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
-        Vector2 bubble_pos = {
-            startPos.x - radius,
-            startPos.y - radius
-        };
-        float bubble_rotation = { 0 };
-        float bubble_scale = radius * 2;
-        //DrawTextureEx(bubble_texture, bubble_pos, bubble_rotation, bubble_scale, Fade(RAYWHITE, 0.25F));
-        EndShaderMode();
+        if (p->glow) {
+            // DRAW BUBBLE USING SHADERS
+            radius = bar_w * sqrt(final_amplitude) * 1.25F * 2;
+            BeginShaderMode(p->bubble);
+            Texture2D bubble_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+            Vector2 bubble_pos = {
+                startPos.x - radius,
+                startPos.y - radius
+            };
+            float bubble_rotation = { 0 };
+            float bubble_scale = radius * 2;
+            DrawTextureEx(bubble_texture, bubble_pos, bubble_rotation, bubble_scale, Fade(RAYWHITE, 0.25F));
+            EndShaderMode();
+        }
 
         // DRAW CIRCLE USING SHADERS
         radius = bar_w * sqrt(final_amplitude) * 1.10F * 2;
@@ -2702,7 +2333,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         };
         float rotation = { 0 };
         float scale = radius * 2;
-        //DrawTextureEx(circle_texture, top_pos, rotation, scale, color);
+        DrawTextureEx(circle_texture, top_pos, rotation, scale, color);
 
         // BASE CIRCLE
         radius = radius * 0.75F;
@@ -2718,7 +2349,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         color = ColorFromHSV(hue * 360 + GetFrameTime(), sat, val);
         Vector2 center_panel_main{
             panel_display.x + (panel_display.width * 0.5F),
-            panel_display.y + (panel_display.height * 0.55F)
+            panel_display.y + (panel_display.height * 0.495F)
         };
 
         float value = sqrt(final_amplitude)*panel_display.height * 0.4F;
@@ -2861,7 +2492,7 @@ void DrawMusicProgress(Rectangle& panel_progress, float& music_volume)
     Color progress_color_hover = PANEL_PROGRESS_COLOR;
 
     if (p->fullscreen && p->mouse_onscreen) DrawRectangleRec(progress_bar, progress_color_hover);
-    else DrawProgessTimeDomain(panel_progress, progress_w);
+    else DrawProgressTimeDomain(panel_progress, progress_w);
 
     if (p->dragging != DRAG_VOLUME) {
         if (CheckCollisionPointRec(mouse_position, panel_progress)) {
@@ -2886,9 +2517,11 @@ void DrawMusicProgress(Rectangle& panel_progress, float& music_volume)
 
         if (music_time < 0) {
             music_time = 1;
+            progress_w = 0;
         }
         else if (music_time > duration) {
             music_time = duration;
+            progress_w = progress_ratio * music_time;
         }
     }
     else if (p->dragging == DRAG_MUSIC_PROGRESS && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
@@ -2930,9 +2563,10 @@ void LoadMP3()
         const char* c_file_path = dropped_files.paths[i];
         std::string cpp_file_path = std::string(c_file_path);
         std::string file_name = std::filesystem::path(cpp_file_path).stem().string();
+        //std::string file_extension = std::filesystem::path(cpp_file_path).extension().string();
 
-        if (IsFileExtension(c_file_path, ".mp3")) {
-            TraceLog(LOG_INFO, "SUCCESS: Adding new file [ %s.mp3 ]", file_name.c_str());
+        if (IsFileExtension(c_file_path, ".mp3") || IsFileExtension(c_file_path, ".wav") || IsFileExtension(c_file_path, ".flac") || IsFileExtension(c_file_path, ".ogg")) {
+            TraceLog(LOG_INFO, "SUCCESS: Adding new file [ %s ]", cpp_file_path.c_str());
 
             Data newData{};
             newData.path = cpp_file_path;
@@ -2961,7 +2595,7 @@ void LoadMP3()
 
         }
         else {
-            TraceLog(LOG_ERROR, "Failed adding new file, that's not mp3");
+            TraceLog(LOG_ERROR, "Failed adding new file, only support mp3/wav/flac/ogg files");
         }
     }
 
@@ -3089,7 +2723,7 @@ void DrawCounter(Rectangle& panel)
     if (data_check.counter > data_check.target) {
         color = Fade(TARGET_DONE_COLOR, 0.9F);
     }
-    DrawTextEx(*font, text, text_coor, font_size, font_space, color);
+    //DrawTextEx(*font, text, text_coor, font_size, font_space, color);
 }
 
 void DrawTitleMP3(Rectangle& panel)
