@@ -86,7 +86,10 @@ here is the detail feature:
 
 <br></br>
 
-### Dependencies
+### Build with:
+- C++17 in MSVC Visual Studio C++ 2022
+
+### Dependencies:
 - Raylib : [https://www.raylib.com/](https://www.raylib.com/)
 - SFML : [https://www.sfml-dev.org/index.php](https://www.sfml-dev.org/)
 - FFTW3 : [https://www.fftw.org/](https://www.fftw.org/)
