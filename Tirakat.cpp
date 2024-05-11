@@ -326,27 +326,32 @@ static std::vector<float> ExtractMusicData(std::string& filename) {
         float sample = static_cast<float>(samples[i]) / 32768.0F; // assuming 16-bit signed integer.
         audio_data.push_back(sample);
     }
-
-    float max_amp{};
-    float min_amp{};
-    for (size_t i = 0; i < audio_data.size(); i++) {
-        max_amp = std::max(max_amp, std::abs(audio_data.at(i)));
-    }
-    //std::cout << max_amp << std::endl;
-    max_amp = 0;
+    int total_frames = audio_data.size();
 
     // Downsampling
     std::vector<float> processed_signal{};
-    int downsampling_rate = DOWNSAMPLING;
-    int index = 0;
+    int downsampling_rate = int(total_frames / 9000);
+    std::cout << "downsampling rate : " << downsampling_rate << std::endl;
     for (size_t i = 0; i < audio_data.size(); i += downsampling_rate) {
-        float sample = audio_data.at(i) * 0.6F; // make it little smaller.
+        float sample = audio_data.at(i);
         processed_signal.push_back(sample);
-        index++;
-        max_amp = std::max(max_amp, sample);
     }
-    //std::cout << "size frames : " << processed_signal.size() << std::endl;
-    //std::cout << max_amp << std::endl;
+    std::cout << "time domain size : " << processed_signal.size() << std::endl;
+
+    float max_amp{ -1000 };
+    float min_amp{ 1000 };
+    for (size_t i = 0; i < processed_signal.size(); i++) {
+        max_amp = std::max(max_amp, std::abs(processed_signal.at(i)));
+        min_amp = std::min(min_amp, std::abs(processed_signal.at(i)));
+    }
+
+    std::cout << "max amp : " << max_amp << std::endl;
+    std::cout << "min amp : " << min_amp << std::endl;
+
+    // Normalization 0 - 1 && Scalling down little bit;
+    for (size_t i = 0; i < processed_signal.size(); i++) {
+        processed_signal.at(i) = (processed_signal.at(i) - min_amp) / (max_amp - min_amp) * 0.6F;
+    }
 
     return processed_signal;
 
@@ -421,7 +426,7 @@ int main()
 
     InitWindow((int)screen.w, (int)screen.h, "Tirakat");
     InitAudioDevice();
-    SetTargetFPS(99);
+    SetTargetFPS(119);
     SetWindowIcon(LoadImage(ICON_APP_LOC));
 
     font_m = LoadFontEx(FONT_LOC_Roboto_Slab, 90, 0, 0);
@@ -481,10 +486,6 @@ int main()
         music = LoadMusicStream(data.at(order).path.c_str());
         time_domain_signal = ExtractMusicData(data.at(order).path);
 
-        //if (IsMusicReady(music)) {
-        //    p->music_playing = true;
-        //    p->last_volume = GetMasterVolume();
-        //}
         while (!IsMusicReady(music)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
@@ -495,7 +496,7 @@ int main()
 
     }
 
-    SetMasterVolume(0.5F);
+    SetMasterVolume(0.1F);
     p->dragging = DRAG_RELEASE;
 
 
@@ -544,7 +545,7 @@ int main()
             break;
         }
 
-        DrawFPS(PANEL_LEFT_WIDTH + 10, 10);
+        DrawFPS(screen.w - 90, 10);
 
         EndDrawing();
     }
@@ -1919,7 +1920,7 @@ void DrawProgessTimeDomain(Rectangle& panel, float progress_w)
         }
         else {
             color = GRAY;
-            alpha = 0.5F;
+            alpha = 0.8F;
         }
     
         //DrawLine(x1, y1, x2, y2, Fade(color, alpha));
@@ -1929,8 +1930,8 @@ void DrawProgessTimeDomain(Rectangle& panel, float progress_w)
     // DRAWBLUELINE
     DrawLineEx(
         { panel.x, panel.y + (panel.height * 0.5F) },
-        { progress - 1, panel.y + (panel.height * 0.5F) },
-        2.0F,
+        { progress - 0.5F, panel.y + (panel.height * 0.5F) },
+        1.0F,
         RAYWHITE
     );
 
@@ -2279,7 +2280,7 @@ void DrawMusicList(Rectangle& panel)
                     }
                 }
 
-
+                static bool clicked_in_moving_boundary{};
                 if (CheckCollisionPointRec(mouse_position, moving_boundary)) {
 
                     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -2288,10 +2289,10 @@ void DrawMusicList(Rectangle& panel)
                             selected_index = i;
                             selected_data = data.at(selected_index);
                             y_while_selected = content.y + (content.height * 0.5F) + content_scroll;
-                    
+                            clicked_in_moving_boundary = true;
                         }
                     }
-                    else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                    else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && clicked_in_moving_boundary) {
                         if (selected_index == i) {
                             color_content = ORANGE;
                             //color_font = BLACK;
@@ -2339,9 +2340,13 @@ void DrawMusicList(Rectangle& panel)
 
                     }
                     else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                        clicked_in_moving_boundary = false;
                         delta_y_while_released = delta_y_mouse_down;
 
-                        if (delta_y_while_released > 0) {
+                        if (std::abs(int(delta_y_while_released / content_boundary.height)) == 0) {
+                            p->moving_save = false;
+                        }
+                        else if (delta_y_while_released > 0) {
                             moveup = int(delta_y_while_released / content_boundary.height);
                             if (moveup) {
                                 data.insert(data.begin() + selected_index - (moveup), selected_data);
@@ -2372,15 +2377,12 @@ void DrawMusicList(Rectangle& panel)
                                 order = selected_index + movedown;
                             }
                         }
-                        else {
-                            p->moving_save = false;
-                        }
 
                         y_while_selected = 0;
                         delta_y_mouse_down = 0;
                         delta_y_while_released = 0;
 
-                        if (p->moving_save) if (Save()) TraceLog(LOG_INFO, "Saving New Arranging Playlists in data.txt");
+                        if (p->moving_save) if (Save()) TraceLog(LOG_INFO, "Saving New Arranged Playlists in data.txt");
                     
                     }
 
@@ -2489,7 +2491,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         panel_main.x,
         panel_main.y + 30,
         panel_main.width,
-        50
+        40
     };
     BeginScissorMode(
         static_cast<int>(panel_title_display.x + (pad * 1)),
@@ -2534,8 +2536,10 @@ void DrawMainDisplay(Rectangle& panel_main)
         p->glow = !p->glow;
     }
 
-    dc_offset(in);
-    hann_window(in, N);
+    if (p->music_playing) {
+        dc_offset(in);
+        hann_window(in, N);
+    }
     fft_calculation(in, out, N);
 
     for (int i = 0; i < BUCKETS; i++) {
@@ -2666,7 +2670,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         Vector2 startPos = { bar.x + bar.width / 2, (bar.y + bar.height) - bar_h };
         Vector2 endPos = { bar.x + bar.width / 2, (bar.y + bar.height) };
         float thick = 4.0F * sqrt(final_amplitude);
-        DrawLineEx(startPos, endPos, thick, color);
+        //DrawLineEx(startPos, endPos, thick, color);
 
         Vector2 center_bins = { bar.x + bar.width / 2, bar.y };
         float radius = bar_w * sqrt(final_amplitude) * 1.10F * 2;
@@ -2683,7 +2687,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         };
         float bubble_rotation = { 0 };
         float bubble_scale = radius * 2;
-        DrawTextureEx(bubble_texture, bubble_pos, bubble_rotation, bubble_scale, Fade(RAYWHITE, 0.25F));
+        //DrawTextureEx(bubble_texture, bubble_pos, bubble_rotation, bubble_scale, Fade(RAYWHITE, 0.25F));
         EndShaderMode();
 
         // DRAW CIRCLE USING SHADERS
@@ -2698,7 +2702,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         };
         float rotation = { 0 };
         float scale = radius * 2;
-        DrawTextureEx(circle_texture, top_pos, rotation, scale, color);
+        //DrawTextureEx(circle_texture, top_pos, rotation, scale, color);
 
         // BASE CIRCLE
         radius = radius * 0.75F;
@@ -2711,42 +2715,77 @@ void DrawMainDisplay(Rectangle& panel_main)
 
         
         // NEW FFT ROTATION STYLE, USE LINE AND SHADERS
+        color = ColorFromHSV(hue * 360 + GetFrameTime(), sat, val);
         Vector2 center_panel_main{
             panel_display.x + (panel_display.width * 0.5F),
-            panel_display.y + (panel_display.height * 0.525F)
+            panel_display.y + (panel_display.height * 0.55F)
         };
 
-        //float value = sqrt(final_amplitude)*panel_display.height * 0.3F;
-        float value = final_amplitude*panel_display.height * 0.3F;
+        float value = sqrt(final_amplitude)*panel_display.height * 0.4F;
         float angle = (360.0F / 50.0F) * i;
+        //float angle = 0.5F * (float)i;
         Vector2 startPos_fft_rotation = center_panel_main;
-        Vector2 midPos_fft_rotation = {
-            startPos_fft_rotation.x + (sin(angle) * value * 0.5F),
-            startPos_fft_rotation.y + (cos(angle) * value * 0.5F)
-        };
+
         Vector2 endPos_fft_rotation = {
             startPos_fft_rotation.x + (sin(angle) * value),
             startPos_fft_rotation.y + (cos(angle) * value)
         };
-        //DrawLineEx(startPos_fft_rotation, endPos_fft_rotation, 5.0, color);
+
+        Vector2 Pos_40 = {
+            startPos_fft_rotation.x + (sin(angle) * value) * 0.4F,
+            startPos_fft_rotation.y + (cos(angle) * value) * 0.4F
+        };
+        Vector2 Pos_70 = {
+            startPos_fft_rotation.x + (sin(angle) * value) * 0.7F,
+            startPos_fft_rotation.y + (cos(angle) * value) * 0.7F
+        };
+        Vector2 Pos_90 = {
+            startPos_fft_rotation.x + (sin(angle) * value) * 0.9F,
+            startPos_fft_rotation.y + (cos(angle) * value) * 0.9F
+        };
+        Vector2 Pos_100 = {
+            startPos_fft_rotation.x + (sin(angle) * value) * 0.9F,
+            startPos_fft_rotation.y + (cos(angle) * value) * 0.9F
+        };
+        //DrawLineEx(startPos_fft_rotation, endPos_fft_rotation, 2.0, color);
         {
-            //float radius = value * 0.25F;
-            //float radius = final_amplitude * final_amplitude * 20;
-            //float radius = sqrt(final_amplitude) * panel_display.height * 0.05F;
-            float radius = final_amplitude * panel_display.height * 0.05F;
-            float scale = radius * 2;
-            Vector2 base_pos_end = {
-                endPos_fft_rotation.x - radius *0.5,
-                endPos_fft_rotation.y - radius * 0.5
+
+            float radius_40 = sqrt(value) * 1.0F;
+            float scale = radius_40 * 2;
+            Vector2 base_40_pos = {
+                Pos_40.x - radius_40,
+                Pos_40.y - radius_40,
             };
-            Rectangle rec = {
-                base_pos_end.x,
-                base_pos_end.y,
-                radius,
-                radius
+            DrawTextureEx(circle_texture, base_40_pos, rotation, scale, color);
+            //DrawTextureEx(circle_texture, base_40_pos, rotation, scale, WHITE);
+
+            //float radius_70 = value * 0.05F;
+            float radius_70 = 2.50F;
+            scale = radius_70 * 2;
+            Vector2 base_70_pos = {
+                Pos_70.x - radius_70,
+                Pos_70.y - radius_70,
             };
-            DrawRectangleRec(rec, color);
-            //DrawTextureEx(circle_texture, base_pos_end, rotation, scale, color);
+            //DrawTextureEx(circle_texture, base_70_pos, rotation, scale, color);
+            DrawTextureEx(circle_texture, base_70_pos, rotation, scale, WHITE);
+
+            float radius_90 = value * 0.2F;
+            scale = radius_90 * 2;
+            Vector2 base_90_pos = {
+                Pos_90.x - radius_90,
+                Pos_90.y - radius_90,
+            };
+            //DrawTextureEx(circle_texture, base_90_pos, rotation, scale, color);
+
+            float radius_100 = sqrt(value) * 0.75F;
+            scale = radius_100 * 2;
+            Vector2 base_100_pos = {
+                Pos_100.x - radius_100,
+                Pos_100.y - radius_100,
+            };
+            DrawTextureEx(circle_texture, base_100_pos, rotation, scale, color);
+            //DrawTextureEx(circle_texture, base_100_pos, rotation, scale, WHITE);
+
         }
 
         EndShaderMode();
@@ -2886,41 +2925,44 @@ void LoadMP3()
 {
     FilePathList dropped_files = LoadDroppedFiles();
 
-    const char* c_file_path = dropped_files.paths[0];
-    std::string cpp_file_path = std::string(c_file_path);
-    std::string file_name = std::filesystem::path(cpp_file_path).stem().string();
+    for (size_t i = 0; i < dropped_files.count; i++) {
 
-    if (IsFileExtension(c_file_path, ".mp3")) {
-        TraceLog(LOG_INFO, "SUCCESS: Adding new file [ %s.mp3 ]", file_name.c_str());
+        const char* c_file_path = dropped_files.paths[i];
+        std::string cpp_file_path = std::string(c_file_path);
+        std::string file_name = std::filesystem::path(cpp_file_path).stem().string();
 
-        Data newData{};
-        newData.path = cpp_file_path;
-        newData.name = file_name;
-        newData.duration = GetDuration(c_file_path);
+        if (IsFileExtension(c_file_path, ".mp3")) {
+            TraceLog(LOG_INFO, "SUCCESS: Adding new file [ %s.mp3 ]", file_name.c_str());
 
-        data.push_back(newData);
+            Data newData{};
+            newData.path = cpp_file_path;
+            newData.name = file_name;
+            newData.duration = GetDuration(c_file_path);
 
-        if (Save()) {
-            TraceLog(LOG_INFO, "[SUCCESS] Save [%s] to data.txt", file_name.c_str());
-            ReloadVector();
-            if (zero_data) {
-                order = 0;
-                music = LoadMusicStream(data.at(order).path.c_str());
-                while (!IsMusicReady(music)) {
+            data.push_back(newData);
+
+            if (Save()) {
+                TraceLog(LOG_INFO, "[SUCCESS] Save [%s] to data.txt", file_name.c_str());
+                ReloadVector();
+                if (zero_data) {
+                    order = 0;
+                    music = LoadMusicStream(data.at(order).path.c_str());
+                    while (!IsMusicReady(music)) {
+                    }
+                    PlayMusicStream(music);
+                    AttachAudioStreamProcessor(music.stream, callback);
+                    p->music_playing = true;
                 }
-                PlayMusicStream(music);
-                AttachAudioStreamProcessor(music.stream, callback);
-                p->music_playing = true;
+                zero_data = false;
             }
-            zero_data = false;
+            else {
+                TraceLog(LOG_ERROR, "Failed to save [%s]", file_name.c_str());
+            }
+
         }
         else {
-            TraceLog(LOG_ERROR, "Failed to save [%s]", file_name.c_str());
+            TraceLog(LOG_ERROR, "Failed adding new file, that's not mp3");
         }
-
-    }
-    else {
-        TraceLog(LOG_ERROR, "Failed adding new file, that's not mp3");
     }
 
     UnloadDroppedFiles(dropped_files);
