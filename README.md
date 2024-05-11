@@ -84,6 +84,15 @@ here is the detail feature:
 
 - Have fun!
 
+<br></br>
+
+### Dependencies
+- Raylib : [https://www.raylib.com/](https://www.raylib.com/)
+- SFML : [https://www.sfml-dev.org/index.php](https://www.sfml-dev.org/)
+- FFTW3 : [https://www.fftw.org/](https://www.fftw.org/)
+
+<br></br>
+
 <p align="center">
   <b>If you consider this page is useful, please leave a star ⭐</b>
 </p>
