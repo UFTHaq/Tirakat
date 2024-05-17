@@ -5,9 +5,24 @@
 // 1. FFT (FREQ DOMAIN) SIGNAL STYLE - DONE
 // 2. TIME DOMAIN SIGNAL STYLE - DONE
 // 3. ADD Functionality to can add multiple music at one time - DONE
+// 4. IMITATE THIS THINGS: 
+//    1. https://www.youtube.com/watch?v=SZzehktUeko. and go to 50 seconds positions
+//    2. https://www.youtube.com/watch?v=LqUuMqfW1PE
 
 // SMALL THINGS TODO:
+// 1. FFT RESPON BUAT LEBIH BAIK:
+//    - Jika data baru lebih tinggi dari data hasil moving average:
+//      - maka update data terbaru, bukan data hasil moving average terbaru.
+//    - Jika data baru lebih rendah dari data hasil moving average:
+//      - tidak perlu di gambar.   // aku tidak tahu mana yang lebih baik.
+//      - tidak perlu update. 
+//    Agar menghasilkan sinyal gambar yang lebih responsive saat ada respon sinyal. 
+//    Tetapi tidak berpindah naik dan turun berdasarkan data terbaru, melainkan turun seperti gravitasi dengan moving average.
+// 
 // 2. Seringkali FFT tidak tampil, mungkin attach terjadi ketika music belum siap, jadi perlu while loop dulu sampai siap lalu lanjut ke attach music.
+
+
+
 
 #include <iostream>
 #include <filesystem>
@@ -145,7 +160,7 @@ const int N{ 1 << 10 };
 fftw_complex* in = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
 fftw_complex* out = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
 
-const int BUCKETS{ 64 };
+const int BUCKETS{ 1 << 6 };
 std::array<float, BUCKETS> Spectrum{};
 std::array<float, BUCKETS + 1> Freq_Bin{};
 
@@ -248,10 +263,16 @@ float min_frequency = 20.0F;
 float max_frequency = 20000.0F;
 float bin_width = (max_frequency - min_frequency) / BUCKETS;
 
-void make_bins() {
+float log_f_min = std::log10(min_frequency);
+float log_f_max = std::log10(max_frequency);
+float delta_log = (log_f_max - log_f_min) / BUCKETS;
 
+void make_bins() {
+    std::cout << std::fixed << std::setprecision(2);
     for (int i = 0; i <= BUCKETS; i++) {
         Freq_Bin.at(i) = min_frequency + i * bin_width;
+        //Freq_Bin.at(i) = std::powf(10, log_f_min + i * delta_log);
+        std::cout << Freq_Bin[i] << std::endl;
     }
 }
 
@@ -359,7 +380,7 @@ static std::vector<float> ExtractMusicData(std::string& filename) {
 Vector2 mouse_position{};
 std::vector<Data> data{};
 size_t data_size{};
-size_t order{};
+size_t music_play{};
 const std::filesystem::path data_dir{ "resources/Data" };
 const std::filesystem::path data_txt{ "resources/Data/data.txt" };
 bool zero_data{false};
@@ -480,8 +501,8 @@ int main()
     if (Check_StartUp_Page()) {
         ReloadVector();
 
-        music = LoadMusicStream(data.at(order).path.c_str());
-        time_domain_signal = ExtractMusicData(data.at(order).path);
+        music = LoadMusicStream(data.at(music_play).path.c_str());
+        time_domain_signal = ExtractMusicData(data.at(music_play).path);
 
         while (!IsMusicReady(music)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -599,7 +620,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         SetMouseCursor(MOUSE_CURSOR_DEFAULT);
     }
 
-    duration = data.at(order).duration;
+    duration = data.at(music_play).duration;
 
     if (p->reset_time == true) {
         SeekMusicStream(music, 0.1F);
@@ -686,24 +707,24 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             if (music_time >= (duration - 100)) {
 
                 if (time_played >= threshold_80) {
-                    data.at(order).counter++;
+                    data.at(music_play).counter++;
                     Save();
                     repetition_saved = true;
-                    int data_counter = data.at(order).counter;
-                    TraceLog(LOG_INFO, "[SUCCESS] Counter++ [%s] from : [%d] to : [%d]", data.at(order).name.c_str(), (data_counter - 1), data_counter);
+                    int data_counter = data.at(music_play).counter;
+                    TraceLog(LOG_INFO, "[SUCCESS] Counter++ [%s] from : [%d] to : [%d]", data.at(music_play).name.c_str(), (data_counter - 1), data_counter);
                 }
 
                 if (p->repeat == OFF) {
 
-                    if (order == data.size() - 1) order = 0;
-                    else order++;
+                    if (music_play == data.size() - 1) music_play = 0;
+                    else music_play++;
 
                     DetachAudioStreamProcessor(music.stream, callback);
                     ResetVisualizerParameter();
-                    music = LoadMusicStream(data.at(order).path.c_str());
+                    music = LoadMusicStream(data.at(music_play).path.c_str());
                     AttachAudioStreamProcessor(music.stream, callback);
 
-                    time_domain_signal = ExtractMusicData(data.at(order).path);
+                    time_domain_signal = ExtractMusicData(data.at(music_play).path);
                 }
 
                 p->reset_time = true;
@@ -1085,7 +1106,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         //DrawRectangleRounded(target_rect, 0.5F, 10, DARKGRAY);
         {
             font = &font_number;
-            std::string target = std::to_string(data.at(order).target);
+            std::string target = std::to_string(data.at(music_play).target);
             const char* text = target.c_str();
             float font_size = target_rect.height * 0.9F;
             float font_space = 0.0F;
@@ -1145,11 +1166,11 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             icon_color = RED;
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
 
-                if (order >= 0 && order < data.size()) {
-                    data.erase(data.begin() + order);
+                if (music_play >= 0 && music_play < data.size()) {
+                    data.erase(data.begin() + music_play);
 
-                    if (order == data.size()) {
-                        order--;
+                    if (music_play == data.size()) {
+                        music_play--;
                     }
                     if (Save()) TraceLog(LOG_INFO, "[SUCCESS] Delete Music");
 
@@ -1176,8 +1197,8 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
                     DetachAudioStreamProcessor(music.stream, callback);
                     ResetVisualizerParameter();
 
-                    music = LoadMusicStream(data.at(order).path.c_str());
-                    time_domain_signal = ExtractMusicData(data.at(order).path);
+                    music = LoadMusicStream(data.at(music_play).path.c_str());
+                    time_domain_signal = ExtractMusicData(data.at(music_play).path);
 
                     p->reset_time = true;
                     setting_on = OFF;
@@ -1199,10 +1220,10 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         }
 
         // DRAW POPUP RESET TARGET
-        std::string name{ data.at(order).name };
+        std::string name{ data.at(music_play).name };
         size_t size_name = name.size();
-        std::string popup_name{ data.at(order).name.substr(0, 25) };
-        std::string popup_old_target{ std::to_string(data.at(order).target) };
+        std::string popup_name{ data.at(music_play).name.substr(0, 25) };
+        std::string popup_old_target{ std::to_string(data.at(music_play).target) };
         if (popup_on == ON) {
 
             float popup_w = 360.0F;
@@ -1893,10 +1914,9 @@ void DrawMusicList(Rectangle& panel)
                             DetachAudioStreamProcessor(music.stream, callback);
                             ResetVisualizerParameter();
 
-                            order = i;
-                            // Music Play Load
-                            music = LoadMusicStream(data.at(order).path.c_str());
-                            time_domain_signal = ExtractMusicData(data.at(order).path);
+                            music_play = i;
+                            music = LoadMusicStream(data.at(music_play).path.c_str());
+                            time_domain_signal = ExtractMusicData(data.at(music_play).path);
 
                             AttachAudioStreamProcessor(music.stream, callback);
 
@@ -2007,11 +2027,11 @@ void DrawMusicList(Rectangle& panel)
                             p->moving_save = true;
 
                             // RE SET the playing now order
-                            if (selected_index > order && order >= (selected_index - moveup)) {
-                                order += 1;
+                            if (selected_index > music_play && music_play >= (selected_index - moveup)) {
+                                music_play += 1;
                             }
-                            else if (order == selected_index) {
-                                order = selected_index - moveup;
+                            else if (music_play == selected_index) {
+                                music_play = selected_index - moveup;
                             }
                         }
                         else if (delta_y_while_released < 0) {
@@ -2022,11 +2042,11 @@ void DrawMusicList(Rectangle& panel)
                             }
                             p->moving_save = true;
 
-                            if (selected_index < order && order <= (selected_index + movedown)) {
-                                order -= 1;
+                            if (selected_index < music_play && music_play <= (selected_index + movedown)) {
+                                music_play -= 1;
                             }
-                            else if (order == selected_index) {
-                                order = selected_index + movedown;
+                            else if (music_play == selected_index) {
+                                music_play = selected_index + movedown;
                             }
                         }
 
@@ -2043,7 +2063,7 @@ void DrawMusicList(Rectangle& panel)
 
         }
 
-        if (i == order) {
+        if (i == music_play) {
             color_content = CONTENT_CHOOSE_COLOR;
             color_font = BLACK;
         }
@@ -2218,6 +2238,7 @@ void DrawMainDisplay(Rectangle& panel_main)
 
         for (int j = 0; j < BUCKETS; j++) {
             float freq = min_frequency + i * bin_width;
+            //float freq = std::powf(10, log_f_min + i * delta_log);
 
             if (freq >= Freq_Bin.at(j) && freq <= Freq_Bin.at(j + 1)) {
                 Spectrum.at(j) = std::max(Spectrum.at(j), amplitude);
@@ -2303,12 +2324,12 @@ void DrawMainDisplay(Rectangle& panel_main)
         DrawLineEx(startPos, endPos, thick, color);
 
         Vector2 center_bins = { bar.x + bar.width / 2, bar.y };
-        float radius = bar_w * sqrt(final_amplitude) * 1.10F * 2;
+        float radius = bar_w * sqrt(final_amplitude) * 1.25F * 2;
 
         // Maybe can used for toggle glow or bubble effect. not as default 
         if (p->glow) {
             // DRAW BUBBLE USING SHADERS
-            radius = bar_w * sqrt(final_amplitude) * 1.25F * 2;
+            radius = bar_w * sqrt(final_amplitude) * 1.40F * 2;
             BeginShaderMode(p->bubble);
             Texture2D bubble_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
             Vector2 bubble_pos = {
@@ -2322,7 +2343,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         }
 
         // DRAW CIRCLE USING SHADERS
-        radius = bar_w * sqrt(final_amplitude) * 1.10F * 2;
+        radius = bar_w * sqrt(final_amplitude) * 1.20F * 2;
         BeginShaderMode(p->circle);
         Texture2D circle_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
 
@@ -2336,7 +2357,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         DrawTextureEx(circle_texture, top_pos, rotation, scale, color);
 
         // BASE CIRCLE
-        radius = radius * 0.75F;
+        radius = radius * 0.70F;
         scale = radius * 2;
         Vector2 base_pos = {
             endPos.x - radius,
@@ -2579,8 +2600,8 @@ void LoadMP3()
                 TraceLog(LOG_INFO, "[SUCCESS] Save [%s] to data.txt", file_name.c_str());
                 ReloadVector();
                 if (zero_data) {
-                    order = 0;
-                    music = LoadMusicStream(data.at(order).path.c_str());
+                    music_play = 0;
+                    music = LoadMusicStream(data.at(music_play).path.c_str());
                     while (!IsMusicReady(music)) {
                     }
                     PlayMusicStream(music);
@@ -2605,8 +2626,8 @@ void LoadMP3()
 void ApplyInputReset(std::string& input, bool& popup_on, std::string& name, bool& setting_on)
 {
     int new_target = std::stoi(input);
-    int old_target = data.at(order).target;
-    data.at(order).target = new_target;
+    int old_target = data.at(music_play).target;
+    data.at(music_play).target = new_target;
     popup_on = OFF;
 
     if (Save()) TraceLog(LOG_INFO, "[SUCCESS] Reset Target of [%s] from : [%d] to : [%d]", name.c_str(), old_target, new_target);
@@ -2706,8 +2727,8 @@ void DrawDuration(Rectangle& panel_duration)
 
 void DrawCounter(Rectangle& panel)
 {
-    std::string counter = std::to_string(data.at(order).counter);
-    std::string target = std::to_string(data.at(order).target);
+    std::string counter = std::to_string(data.at(music_play).counter);
+    std::string target = std::to_string(data.at(music_play).target);
     std::string cpp_text = counter + " / " + target;
 
     const char* text = cpp_text.c_str();
@@ -2719,7 +2740,7 @@ void DrawCounter(Rectangle& panel)
         panel.y + (panel.height - text_measure.y) / 2
     };
     Color color = RAYWHITE;
-    Data data_check = data.at(order);
+    Data data_check = data.at(music_play);
     if (data_check.counter > data_check.target) {
         color = Fade(TARGET_DONE_COLOR, 0.9F);
     }
@@ -2728,7 +2749,7 @@ void DrawCounter(Rectangle& panel)
 
 void DrawTitleMP3(Rectangle& panel)
 {
-    std::string cpp_text = data.at(order).name;
+    std::string cpp_text = data.at(music_play).name;
     const char* text = cpp_text.c_str();
     float font_size = 32.0F;
     float font_space = 0.0F;
