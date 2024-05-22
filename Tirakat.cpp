@@ -182,7 +182,7 @@ const int BUCKETS{ 1 << 6 };
 std::array<float, BUCKETS> Spectrum{};
 std::array<float, BUCKETS + 1> Freq_Bin{};
 
-const int SMOOTHING_BUFFER_SIZE = 16;
+const int SMOOTHING_BUFFER_SIZE = 8;
 std::array<std::array<float, SMOOTHING_BUFFER_SIZE>, BUCKETS> prevAmplitude{};
 std::array<float, BUCKETS> smoothedAmplitude{};
 std::array<bool, BUCKETS> stronger{};
@@ -462,7 +462,7 @@ int main()
 
     InitWindow((int)screen.w, (int)screen.h, "Tirakat");
     InitAudioDevice();
-    SetTargetFPS(150);
+    SetTargetFPS(60);
     SetWindowIcon(LoadImage(ICON_APP_LOC));
 
     font_m = LoadFontEx(FONT_LOC_Roboto_Slab, 90, 0, 0);
@@ -2472,26 +2472,53 @@ void DrawMainDisplay(Rectangle& panel_main)
 
     }
 
-    static float time_accumulate = 0;
-    time_accumulate += dt;
+    //static float time_accumulate = 0;
+    //time_accumulate += dt;
 
-    if (time_accumulate >= 1.0F) {
-        *pointsArray1 = *pointsArray0;
-        *pointsArray2 = *pointsArray1;
-        *pointsArray3 = *pointsArray2;
-        *pointsArray4 = *pointsArray3;
+    //float duration = 1.0F;
+    //float startVal = 0.8F;
+    //float endVal = 0.0F;
 
-        time_accumulate = 0;
-    }
+    //static float life1 = 0;
+    //static float life2 = 0;
+    //static float life3 = 0;
+    //static float life4 = 0;
 
-    Color color = WHITE;
-    DrawSplineCatmullRom(pointsArray4, BUCKETS, 0.4, Fade(color, 0.2F));
-    DrawSplineCatmullRom(pointsArray3, BUCKETS, 0.6, Fade(color, 0.3F));
-    DrawSplineCatmullRom(pointsArray2, BUCKETS, 0.8, Fade(color, 0.4F));
-    DrawSplineCatmullRom(pointsArray1, BUCKETS, 1.0, Fade(color, 0.5F));
+    //if (time_accumulate >= 0.2F) {
+
+    //    if (life1 <= 0.0F) {
+    //        life1 = duration;
+    //        *pointsArray1 = *pointsArray0;
+    //    }
+    //    else if (life2 <= 0.0F) {
+    //        life2 = duration;
+    //        *pointsArray2 = *pointsArray0;
+    //    }
+    //    else if (life3 <= 0.0F) {
+    //        life3 = duration;
+    //        *pointsArray3 = *pointsArray0;
+    //    }
+    //    else if (life4 <= 0.0F) {
+    //        life4 = duration;
+    //        *pointsArray4 = *pointsArray0;
+    //    }
+
+    //    time_accumulate = 0;
+    //}
+
+    //life1 -= dt;
+    //life2 -= dt;
+    //life3 -= dt;
+    //life4 -= dt;
+
+    Color color = GRAY;
+    //DrawSplineCatmullRom(pointsArray4, BUCKETS, life4 * 1, Fade(color, life4));
+    //DrawSplineCatmullRom(pointsArray3, BUCKETS, life3 * 1, Fade(color, life3));
+    //DrawSplineCatmullRom(pointsArray2, BUCKETS, life2 * 1, Fade(color, life2));
+    //DrawSplineCatmullRom(pointsArray1, BUCKETS, life1 * 1, Fade(color, life1));
 
 
-    color = YELLOW;
+    color = BLUE;
     DrawSplineCatmullRom(pointsArray0, BUCKETS, 11.0F, Fade(color, 0.1F));
     DrawSplineCatmullRom(pointsArray0, BUCKETS, 9.0F, Fade(color, 0.15F));
     DrawSplineCatmullRom(pointsArray0, BUCKETS, 7.0F, Fade(color, 0.2F));
