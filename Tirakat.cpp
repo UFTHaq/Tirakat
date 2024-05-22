@@ -8,6 +8,24 @@
 // 4. IMITATE THIS THINGS: 
 //    1. https://www.youtube.com/watch?v=SZzehktUeko. and go to 50 seconds positions
 //    2. https://www.youtube.com/watch?v=LqUuMqfW1PE
+//    3. maybe use drawspline, check if it can do good in 64 data. 
+//       siapkan 5 array
+//       ambil spline taruh di array0, ambil sample
+//       jika telah 0.1s pindahkan ke array1, dan ambil array baru masukkan ke array0,
+//       jika telah 0.1s pidahkan ke array sebelumnya,
+//       jika telah 0.1s pidahkan ke array sebelumnya,
+//       jika telah 0.1s pidahkan ke array sebelumnya,
+//       jika telah 0.1s pidahkan ke array sebelumnya,
+//       jadi dalam 1 detik ada 10 sample string. dan terus berganti dengan sample string spline yang baru.
+//       string0 paling terang dan tebal, dan string4 paling redup dan tipis. coba dulu di raylib. jika jelek baru pikirkan custom shadernya nanti.
+//       dan waktu pengambilan sample mungkin diubah ke 0.05s.
+//       Mungkin dibuat dengan membuat class pada tiap kali waktunya sample dan memiliki method untuk menghitung waktu hidupnya 
+//       dan menginterpolasi thickness dan alpha dengan inverse nilai waktu lifetime-nya.2
+// 
+//    
+// 5. Dear ImGui Best tutorial to use in Visual Studio 2022: 
+//    Part 1: https://www.youtube.com/watch?v=SP6Djf6ku1E
+//    Part 2: https://www.youtube.com/watch?v=HivfFkhpLjE
 
 // SMALL THINGS TODO:
 // 1. FFT RESPON BUAT LEBIH BAIK:
@@ -259,8 +277,8 @@ float calculateMovingAverage(std::array<float, SMOOTHING_BUFFER_SIZE>& arr, int 
     return sum / size;
 }
 
-float min_frequency = 20.0F;
-float max_frequency = 20000.0F;
+float min_frequency = 0.0F;
+float max_frequency = 22000.0F;
 float bin_width = (max_frequency - min_frequency) / BUCKETS;
 
 float log_f_min = std::log10(min_frequency);
@@ -444,7 +462,7 @@ int main()
 
     InitWindow((int)screen.w, (int)screen.h, "Tirakat");
     InitAudioDevice();
-    SetTargetFPS(119);
+    SetTargetFPS(150);
     SetWindowIcon(LoadImage(ICON_APP_LOC));
 
     font_m = LoadFontEx(FONT_LOC_Roboto_Slab, 90, 0, 0);
@@ -1545,7 +1563,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
 void DrawProgressTimeDomain(Rectangle& panel, float progress_w)
 {
     float progress = progress_w + panel.x;
-    Color color = LIGHTGRAY;
+    Color color = DARKGRAY;
     float alpha = 0.5F;
 
     // DRAW GRAY LINE
@@ -2269,6 +2287,12 @@ void DrawMainDisplay(Rectangle& panel_main)
 
         maxAmplitude = std::max(maxAmplitude, smoothedAmplitude.at(i));
     }
+    // SPLINE INITIALIZATION
+    Vector2* pointsArray0 = new Vector2[BUCKETS];
+    Vector2* pointsArray1 = new Vector2[BUCKETS];
+    Vector2* pointsArray2 = new Vector2[BUCKETS];
+    Vector2* pointsArray3 = new Vector2[BUCKETS];
+    Vector2* pointsArray4 = new Vector2[BUCKETS];
 
     // JUST FOR DRAWING
     for (int i = 0; i < BUCKETS; i++) {
@@ -2291,6 +2315,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         default:
             break;
         }
+
 
         float bar_h = final_amplitude * panel_display.height * 0.65F;
         float bar_w = panel_display.width / BUCKETS;
@@ -2321,10 +2346,13 @@ void DrawMainDisplay(Rectangle& panel_main)
         Vector2 startPos = { bar.x + bar.width / 2, (bar.y + bar.height) - bar_h };
         Vector2 endPos = { bar.x + bar.width / 2, (bar.y + bar.height) };
         float thick = 4.0F * sqrt(final_amplitude) * (bar_w * 0.10F);
-        DrawLineEx(startPos, endPos, thick, color);
+        //DrawLineEx(startPos, endPos, thick, color);
 
         Vector2 center_bins = { bar.x + bar.width / 2, bar.y };
         float radius = bar_w * sqrt(final_amplitude) * 1.25F * 2;
+
+        pointsArray0[i] = center_bins;
+        //if (dt % 2 == 0) point
 
         // Maybe can used for toggle glow or bubble effect. not as default 
         if (p->glow) {
@@ -2354,7 +2382,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         };
         float rotation = { 0 };
         float scale = radius * 2;
-        DrawTextureEx(circle_texture, top_pos, rotation, scale, color);
+        //DrawTextureEx(circle_texture, top_pos, rotation, scale, color);
 
         // BASE CIRCLE
         radius = radius * 0.70F;
@@ -2443,6 +2471,39 @@ void DrawMainDisplay(Rectangle& panel_main)
         EndShaderMode();
 
     }
+
+    static float time_accumulate = 0;
+    time_accumulate += dt;
+
+    if (time_accumulate >= 1.0F) {
+        *pointsArray1 = *pointsArray0;
+        *pointsArray2 = *pointsArray1;
+        *pointsArray3 = *pointsArray2;
+        *pointsArray4 = *pointsArray3;
+
+        time_accumulate = 0;
+    }
+
+    Color color = WHITE;
+    DrawSplineCatmullRom(pointsArray4, BUCKETS, 0.4, Fade(color, 0.2F));
+    DrawSplineCatmullRom(pointsArray3, BUCKETS, 0.6, Fade(color, 0.3F));
+    DrawSplineCatmullRom(pointsArray2, BUCKETS, 0.8, Fade(color, 0.4F));
+    DrawSplineCatmullRom(pointsArray1, BUCKETS, 1.0, Fade(color, 0.5F));
+
+
+    color = YELLOW;
+    DrawSplineCatmullRom(pointsArray0, BUCKETS, 11.0F, Fade(color, 0.1F));
+    DrawSplineCatmullRom(pointsArray0, BUCKETS, 9.0F, Fade(color, 0.15F));
+    DrawSplineCatmullRom(pointsArray0, BUCKETS, 7.0F, Fade(color, 0.2F));
+    DrawSplineCatmullRom(pointsArray0, BUCKETS, 5.0F, Fade(color, 0.25F));
+    DrawSplineCatmullRom(pointsArray0, BUCKETS, 2.0F, Fade(WHITE, 1.0F));
+
+
+    delete[] pointsArray0;
+    delete[] pointsArray1;
+    delete[] pointsArray2;
+    delete[] pointsArray3;
+    delete[] pointsArray4;
 
     // Diffuser Center circle
     //Vector2 center{
