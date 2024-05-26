@@ -2319,8 +2319,8 @@ void DrawMainDisplay(Rectangle& panel_main)
         maxAmplitude = std::max(maxAmplitude, smoothedAmplitude.at(i));
     }
     // SPLINE INITIALIZATION
-    Vector2* pointsArray_RealTime = new Vector2[BUCKETS];
-    Vector2* pointsArray_Norm = new Vector2[BUCKETS];
+    std::unique_ptr<Vector2[]> pointsArray_RealTime_smart(new Vector2[BUCKETS]);
+    std::unique_ptr<Vector2[]> pointsArray_Norm_smart(new Vector2[BUCKETS]);
 
     // JUST FOR DRAWING
     for (int i = 0; i < BUCKETS; i++) {
@@ -2345,7 +2345,8 @@ void DrawMainDisplay(Rectangle& panel_main)
         }
 
         Vector2 coor = { normalization(i, 0, BUCKETS - 1), (1 - final_amplitude) };
-        pointsArray_Norm[i] = coor;
+        //pointsArray_Norm[i] = coor;
+        pointsArray_Norm_smart[i] = coor;
 
         float bar_h = final_amplitude * panel_display.height * 0.65F;
         float bar_w = panel_display.width / BUCKETS;
@@ -2381,7 +2382,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         Vector2 center_bins = { bar.x + bar.width / 2, bar.y };
         float radius = bar_w * sqrt(final_amplitude) * 1.25F * 2;
 
-        pointsArray_RealTime[i] = center_bins;
+        pointsArray_RealTime_smart[i] = center_bins;
 
         // Maybe can used for toggle glow or bubble effect. not as default 
         if (p->glow) {
@@ -2501,52 +2502,11 @@ void DrawMainDisplay(Rectangle& panel_main)
 
     }
 
-    //static float time_accumulate = 0;
-    //time_accumulate += dt;
-
-    //float duration = 1.0F;
-    //float startVal = 0.8F;
-    //float endVal = 0.0F;
-
-    //static float life1 = 0;
-    //static float life2 = 0;
-    //static float life3 = 0;
-    //static float life4 = 0;
-
-    //if (time_accumulate >= 0.2F) {
-
-    //    if (life1 <= 0.0F) {
-    //        life1 = duration;
-    //        *pointsArray1 = *pointsArray0;
-    //    }
-    //    else if (life2 <= 0.0F) {
-    //        life2 = duration;
-    //        *pointsArray2 = *pointsArray0;
-    //    }
-    //    else if (life3 <= 0.0F) {
-    //        life3 = duration;
-    //        *pointsArray3 = *pointsArray0;
-    //    }
-    //    else if (life4 <= 0.0F) {
-    //        life4 = duration;
-    //        *pointsArray4 = *pointsArray0;
-    //    }
-
-    //    time_accumulate = 0;
-    //}
-
-    //life1 -= dt;
-    //life2 -= dt;
-    //life3 -= dt;
-    //life4 -= dt;
-
     // Make Rectangle
     Rectangle base{ panel_display };
     int JUMLAH_RECT = 100;
     double coef_rect = 0.955;
     std::deque<Rectangle> landscape_rects{};
-    //std::vector<Rectangle> landscape_rects{};
-    //landscape_rects.reserve(JUMLAH_RECT);
 
     for (int i = 0; i < JUMLAH_RECT; i++) {
         Rectangle edited = {
@@ -2557,7 +2517,6 @@ void DrawMainDisplay(Rectangle& panel_main)
         };
 
         landscape_rects.push_back(edited);
-        //landscape_rects.insert(landscape_rects.begin(), edited);
         //landscape_rects.push_front(edited);
         coef_rect += 0.00015;
 
@@ -2566,8 +2525,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         //DrawRectangleLinesEx(edited, 1.0F, RED);
     }
 
-    Vector2* spline_pointer = new Vector2[BUCKETS];
-    //std::unique_ptr<Vector2[]> spline_pointer_smart(new Vector2[BUCKETS]);
+    std::unique_ptr<Vector2[]> spline_pointer_smart(new Vector2[BUCKETS]);
 
     static float time_check{};
     time_check += dt;
@@ -2577,15 +2535,13 @@ void DrawMainDisplay(Rectangle& panel_main)
 
         std::vector<Vector2> points{};
         for (int i = 0; i < BUCKETS; i++) {
-            points.push_back(pointsArray_Norm[i]);
+            points.push_back(pointsArray_Norm_smart[i]);
         }
 
         if (landscape_splines.size() >= JUMLAH_RECT) {
             landscape_splines.pop_back();
-            //landscape_splines.pop_front();
         }
         landscape_splines.push_front(points);
-        //landscape_splines.push_back(points);
 
         time_check = 0;
     }
@@ -2597,49 +2553,23 @@ void DrawMainDisplay(Rectangle& panel_main)
 
         float thick = 0.75F;
         for (int j = 0; j < BUCKETS; j++) {
-            spline_pointer[j] = {
+            spline_pointer_smart[j] = {
                 rect.x + rect.width * landscape_splines.at(i)[j].x,
                 rect.y + rect.height * landscape_splines.at(i)[j].y
             };
-            //spline_pointer_smart[j] = {
-            //    rect.x + rect.width * landscape_splines.at(i)[j].x,
-            //    rect.y + rect.height * landscape_splines.at(i)[j].y
-            //};
-            
         }
-        //DrawSplineCatmullRom(spline_pointer, BUCKETS, thick, LIGHTGRAY);
-        DrawSplineLinear(spline_pointer, BUCKETS, thick, LIGHTGRAY);
-        //DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, thick, LIGHTGRAY);
-        //thick -= 0.015F;
+        DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, thick, LIGHTGRAY);
+
         //DrawRectangleLinesEx(rect, .4F, BLUE);
     }
 
-    Color color = GRAY;
-    //DrawSplineCatmullRom(pointsArray4, BUCKETS, life4 * 1, Fade(color, life4));
-    //DrawSplineCatmullRom(pointsArray3, BUCKETS, life3 * 1, Fade(color, life3));
-    //DrawSplineCatmullRom(pointsArray2, BUCKETS, life2 * 1, Fade(color, life2));
-    //DrawSplineCatmullRom(pointsArray1, BUCKETS, life1 * 1, Fade(color, life1));
+    Color color = BLUE;
 
-
-    color = BLUE;
-    DrawSplineCatmullRom(pointsArray_RealTime, BUCKETS, 11.0F, Fade(color, 0.1F));
-    DrawSplineCatmullRom(pointsArray_RealTime, BUCKETS, 9.0F, Fade(color, 0.15F));
-    DrawSplineCatmullRom(pointsArray_RealTime, BUCKETS, 7.0F, Fade(color, 0.2F));
-    DrawSplineCatmullRom(pointsArray_RealTime, BUCKETS, 5.0F, Fade(color, 0.25F));
-    DrawSplineCatmullRom(pointsArray_RealTime, BUCKETS, 2.0F, Fade(WHITE, 1.0F));
-
-
-    delete[] pointsArray_RealTime;
-    delete[] spline_pointer;
-    delete[] pointsArray_Norm;
-
-    // Diffuser Center circle
-    //Vector2 center{
-    //        (panel_display.x + (panel_display.width * 0.5F)),
-    //        (panel_display.y + (panel_display.height * 0.5F)) + 10
-    //};
-    //DrawCircleV(center, 8, Fade(DARKGRAY, 0.5F));
-    //DrawCircleV(center, 4, Fade(RAYWHITE, 0.8F));
+    DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 13.0F, Fade(color, 0.1F));
+    DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 10.0F, Fade(color, 0.15F));
+    DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 7.0F, Fade(color, 0.2F));
+    DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 5.0F, Fade(color, 0.25F));
+    DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 2.0F, Fade(WHITE, 1.0F));
 
 }
 
