@@ -21,11 +21,28 @@
 //       dan waktu pengambilan sample mungkin diubah ke 0.05s.
 //       Mungkin dibuat dengan membuat class pada tiap kali waktunya sample dan memiliki method untuk menghitung waktu hidupnya 
 //       dan menginterpolasi thickness dan alpha dengan inverse nilai waktu lifetime-nya.2
+// 5. Coba untuk capture dan buat seperti cascade milik muzkaw tetapi tidak diagonal, melainkan kebelakang dan ditengah semakin kecil, naik dan kecilkan misal 95%, dan naik lagi 95%
+//    Hingga membuat effect semakin jauh semakin kecil. mungkin bagus.
+//    Masukkan ke sebuah struct mungkin, berisi ukuran rectangle dan posisi, data pointer spline, lalu posisi y dari spline, dan ukuran yang makin mengecil, coef yang makin jauh makin kecil dan selalu di kali 0.95, coef *= 0.95F 
+//    sehingga ketinggian dan lebar tinggal menyesuaikan coef. dan juga tebal, dan alpha untuk splines bisa menggunakan coef tersebut. coef bisa digunakan untuk posisi rectangle.
+//    0000a -> 000ab -> 00abc -> 0abcd -> abcde -> bcdef -> cdefg -> defgh -> dst. jika jumlah struct == batas, maka buang data paling tua, dan tambahkan data baru. 
 // 
+//    Perlu buat rectangle untuk tempat draw spline, mungkin 20 - 30 rect dengan posisi makin kecil makin jauh. masukkan ke dalam vector, atau array.
+//    Jadi tinggal buat loop untuk para rectangle tadi, untuk titik spline tinggal ikuti bar_h tetapi dengan rect masing masing. yang urutan rect tetap, urutan data spline yang berubah seperti data diatas.
+//    yang paling awal yang paling jauh, jadi jika ada data baru, buang data awal, dan append data baru. mungkin pake linked list lebih cepat dibanding vector? entahlah, nanti saja itu, untuk optimization.
+// 
+// 5. Extract Musical Note from Audio FFT
+//    https://www.youtube.com/watch?v=rj9NOiFLxWA&t=369s, i think this good for FFT Output mode 1.
+//  
+// 7. library to write MIDI using code : Midifile by sapp.org : 
+//    https://midifile.sapp.org/class/MidiFile/
+//    https://github.com/craigsapp/midifile -> MIDI file writing example
 //    
-// 5. Dear ImGui Best tutorial to use in Visual Studio 2022: 
+// 8. Dear ImGui Best tutorial to use in Visual Studio 2022: 
 //    Part 1: https://www.youtube.com/watch?v=SP6Djf6ku1E
 //    Part 2: https://www.youtube.com/watch?v=HivfFkhpLjE
+//
+// 9. Maybe consider to use JUCE? maybe not, maybe in the next project, maybe for MusMiBot?
 
 // SMALL THINGS TODO:
 // 1. FFT RESPON BUAT LEBIH BAIK:
@@ -40,13 +57,15 @@
 // 2. Seringkali FFT tidak tampil, mungkin attach terjadi ketika music belum siap, jadi perlu while loop dulu sampai siap lalu lanjut ke attach music.
 
 
-
+// MAXIMUM MIDI FREQ -> G#9/Ab9 = 13289.75Hz
 
 #include <iostream>
 #include <filesystem>
+#include <memory>
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include <deque>
 #include <array>
 #include <string>
 #include <cassert>
@@ -147,7 +166,7 @@ struct Plug {
     bool repeat{ OFF };
     int mouse_cursor{};
     bool glow{ false };
-    int mode{ MODE_MULTI_PEAK };
+    int mode{ MODE_NATURAL };
     bool moving_save{ false };
     Shader circle{};
     Shader bubble{};
@@ -182,7 +201,7 @@ const int BUCKETS{ 1 << 6 };
 std::array<float, BUCKETS> Spectrum{};
 std::array<float, BUCKETS + 1> Freq_Bin{};
 
-const int SMOOTHING_BUFFER_SIZE = 8;
+const int SMOOTHING_BUFFER_SIZE = 12;
 std::array<std::array<float, SMOOTHING_BUFFER_SIZE>, BUCKETS> prevAmplitude{};
 std::array<float, BUCKETS> smoothedAmplitude{};
 std::array<bool, BUCKETS> stronger{};
@@ -252,7 +271,8 @@ float natural_scale(float amplitude, float Fit_factor) {
 }
 
 float exponential_scale(float amplitude, float Fit_factor) {
-    return std::log10(amplitude * Fit_factor) * Fit_factor;
+    //return std::log10(amplitude * Fit_factor) * Fit_factor;
+    return std::log10(amplitude) * Fit_factor;
 }
 
 float multi_peak_scale(float amplitude, int i, float Fit_factor, const std::array<PeakInfo, BUCKETS>& Peak) {
@@ -290,7 +310,7 @@ void make_bins() {
     for (int i = 0; i <= BUCKETS; i++) {
         Freq_Bin.at(i) = min_frequency + i * bin_width;
         //Freq_Bin.at(i) = std::powf(10, log_f_min + i * delta_log);
-        std::cout << Freq_Bin[i] << std::endl;
+        //std::cout << Freq_Bin[i] << std::endl;
     }
 }
 
@@ -395,6 +415,14 @@ static std::vector<float> ExtractMusicData(std::string& filename) {
     // Jika input berupa file wav, perlu penguatan pada amplitude, sekitar 3 - 6 kali lipat.
 }
 
+float normalization(float data, float min_val, float max_val) {
+    if (min_val == max_val) return data;
+
+    float scaling_factor = 1.0F / (max_val - min_val);
+
+    return (data - min_val) * scaling_factor;
+}
+
 Vector2 mouse_position{};
 std::vector<Data> data{};
 size_t data_size{};
@@ -449,8 +477,12 @@ int movedown{};
 
 int content_preveiw{};
 
+std::deque<std::vector<Vector2>> landscape_splines{};
+
 int main()
 {
+    //landscape_splines.reserve(BUCKETS * 60);
+
     std::cout << std::setprecision(3);
     std::cout << "Hello World!\n";
     std::cout << "RAYLIB VERSION: " << RAYLIB_VERSION << std::endl;
@@ -462,7 +494,7 @@ int main()
 
     InitWindow((int)screen.w, (int)screen.h, "Tirakat");
     InitAudioDevice();
-    SetTargetFPS(60);
+    SetTargetFPS(75);
     SetWindowIcon(LoadImage(ICON_APP_LOC));
 
     font_m = LoadFontEx(FONT_LOC_Roboto_Slab, 90, 0, 0);
@@ -534,7 +566,6 @@ int main()
 
     SetMasterVolume(0.1F);
     p->dragging = DRAG_RELEASE;
-
 
     make_bins();
 
@@ -1079,7 +1110,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         float icon_size = 100.0F;
         Rectangle dest = setting_rect_icon;
         Rectangle source{ 0, 0, icon_size, icon_size };
-        DrawTexturePro(SETTING_TEX, source, dest, { 0,0 }, 0, icon_color);
+        //DrawTexturePro(SETTING_TEX, source, dest, { 0,0 }, 0, icon_color);
     }
 
     if (setting_on == ON) {
@@ -2288,11 +2319,8 @@ void DrawMainDisplay(Rectangle& panel_main)
         maxAmplitude = std::max(maxAmplitude, smoothedAmplitude.at(i));
     }
     // SPLINE INITIALIZATION
-    Vector2* pointsArray0 = new Vector2[BUCKETS];
-    Vector2* pointsArray1 = new Vector2[BUCKETS];
-    Vector2* pointsArray2 = new Vector2[BUCKETS];
-    Vector2* pointsArray3 = new Vector2[BUCKETS];
-    Vector2* pointsArray4 = new Vector2[BUCKETS];
+    Vector2* pointsArray_RealTime = new Vector2[BUCKETS];
+    Vector2* pointsArray_Norm = new Vector2[BUCKETS];
 
     // JUST FOR DRAWING
     for (int i = 0; i < BUCKETS; i++) {
@@ -2310,12 +2338,14 @@ void DrawMainDisplay(Rectangle& panel_main)
             final_amplitude = multi_peak_scale(final_amplitude, i, 1.0F, Peak);
             break;
         case MODE_MAX_PEAK:
-            final_amplitude = max_peak_scale(final_amplitude, maxAmplitude, 0.9F);
+            final_amplitude = max_peak_scale(final_amplitude, maxAmplitude, 0.2F);
             break;
         default:
             break;
         }
 
+        Vector2 coor = { normalization(i, 0, BUCKETS - 1), (1 - final_amplitude) };
+        pointsArray_Norm[i] = coor;
 
         float bar_h = final_amplitude * panel_display.height * 0.65F;
         float bar_w = panel_display.width / BUCKETS;
@@ -2351,8 +2381,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         Vector2 center_bins = { bar.x + bar.width / 2, bar.y };
         float radius = bar_w * sqrt(final_amplitude) * 1.25F * 2;
 
-        pointsArray0[i] = center_bins;
-        //if (dt % 2 == 0) point
+        pointsArray_RealTime[i] = center_bins;
 
         // Maybe can used for toggle glow or bubble effect. not as default 
         if (p->glow) {
@@ -2391,7 +2420,7 @@ void DrawMainDisplay(Rectangle& panel_main)
             endPos.x - radius,
             endPos.y - radius
         };
-        DrawTextureEx(circle_texture, base_pos, rotation, scale, color);
+        //DrawTextureEx(circle_texture, base_pos, rotation, scale, color);
 
         
         // NEW FFT ROTATION STYLE, USE LINE AND SHADERS
@@ -2436,7 +2465,7 @@ void DrawMainDisplay(Rectangle& panel_main)
                 Pos_40.x - radius_40,
                 Pos_40.y - radius_40,
             };
-            DrawTextureEx(circle_texture, base_40_pos, rotation, scale, color);
+            //DrawTextureEx(circle_texture, base_40_pos, rotation, scale, color);
             //DrawTextureEx(circle_texture, base_40_pos, rotation, scale, WHITE);
 
             //float radius_70 = value * 0.05F;
@@ -2447,7 +2476,7 @@ void DrawMainDisplay(Rectangle& panel_main)
                 Pos_70.y - radius_70,
             };
             //DrawTextureEx(circle_texture, base_70_pos, rotation, scale, color);
-            DrawTextureEx(circle_texture, base_70_pos, rotation, scale, WHITE);
+            //DrawTextureEx(circle_texture, base_70_pos, rotation, scale, WHITE);
 
             float radius_90 = value * 0.2F;
             scale = radius_90 * 2;
@@ -2463,7 +2492,7 @@ void DrawMainDisplay(Rectangle& panel_main)
                 Pos_100.x - radius_100,
                 Pos_100.y - radius_100,
             };
-            DrawTextureEx(circle_texture, base_100_pos, rotation, scale, color);
+            //DrawTextureEx(circle_texture, base_100_pos, rotation, scale, color);
             //DrawTextureEx(circle_texture, base_100_pos, rotation, scale, WHITE);
 
         }
@@ -2511,6 +2540,80 @@ void DrawMainDisplay(Rectangle& panel_main)
     //life3 -= dt;
     //life4 -= dt;
 
+    // Make Rectangle
+    Rectangle base{ panel_display };
+    int JUMLAH_RECT = 100;
+    double coef_rect = 0.955;
+    std::deque<Rectangle> landscape_rects{};
+    //std::vector<Rectangle> landscape_rects{};
+    //landscape_rects.reserve(JUMLAH_RECT);
+
+    for (int i = 0; i < JUMLAH_RECT; i++) {
+        Rectangle edited = {
+            base.x + ((base.width - base.width * coef_rect) / 2),
+            base.y + base.height * 0.025F * coef_rect,
+            base.width * coef_rect,
+            base.height * coef_rect
+        };
+
+        landscape_rects.push_back(edited);
+        //landscape_rects.insert(landscape_rects.begin(), edited);
+        //landscape_rects.push_front(edited);
+        coef_rect += 0.00015;
+
+        base = edited;
+
+        //DrawRectangleLinesEx(edited, 1.0F, RED);
+    }
+
+    Vector2* spline_pointer = new Vector2[BUCKETS];
+    //std::unique_ptr<Vector2[]> spline_pointer_smart(new Vector2[BUCKETS]);
+
+    static float time_check{};
+    time_check += dt;
+    float frame_rate_capture = 40; // FPS
+    float time_to_capture{ 1.0F / frame_rate_capture };
+    if (time_check >= time_to_capture) {
+
+        std::vector<Vector2> points{};
+        for (int i = 0; i < BUCKETS; i++) {
+            points.push_back(pointsArray_Norm[i]);
+        }
+
+        if (landscape_splines.size() >= JUMLAH_RECT) {
+            landscape_splines.pop_back();
+            //landscape_splines.pop_front();
+        }
+        landscape_splines.push_front(points);
+        //landscape_splines.push_back(points);
+
+        time_check = 0;
+    }
+
+    
+
+    for (int i = 0; i < landscape_splines.size(); i++) {
+        Rectangle rect = landscape_rects.at(i);
+
+        float thick = 0.75F;
+        for (int j = 0; j < BUCKETS; j++) {
+            spline_pointer[j] = {
+                rect.x + rect.width * landscape_splines.at(i)[j].x,
+                rect.y + rect.height * landscape_splines.at(i)[j].y
+            };
+            //spline_pointer_smart[j] = {
+            //    rect.x + rect.width * landscape_splines.at(i)[j].x,
+            //    rect.y + rect.height * landscape_splines.at(i)[j].y
+            //};
+            
+        }
+        //DrawSplineCatmullRom(spline_pointer, BUCKETS, thick, LIGHTGRAY);
+        DrawSplineLinear(spline_pointer, BUCKETS, thick, LIGHTGRAY);
+        //DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, thick, LIGHTGRAY);
+        //thick -= 0.015F;
+        //DrawRectangleLinesEx(rect, .4F, BLUE);
+    }
+
     Color color = GRAY;
     //DrawSplineCatmullRom(pointsArray4, BUCKETS, life4 * 1, Fade(color, life4));
     //DrawSplineCatmullRom(pointsArray3, BUCKETS, life3 * 1, Fade(color, life3));
@@ -2519,18 +2622,16 @@ void DrawMainDisplay(Rectangle& panel_main)
 
 
     color = BLUE;
-    DrawSplineCatmullRom(pointsArray0, BUCKETS, 11.0F, Fade(color, 0.1F));
-    DrawSplineCatmullRom(pointsArray0, BUCKETS, 9.0F, Fade(color, 0.15F));
-    DrawSplineCatmullRom(pointsArray0, BUCKETS, 7.0F, Fade(color, 0.2F));
-    DrawSplineCatmullRom(pointsArray0, BUCKETS, 5.0F, Fade(color, 0.25F));
-    DrawSplineCatmullRom(pointsArray0, BUCKETS, 2.0F, Fade(WHITE, 1.0F));
+    DrawSplineCatmullRom(pointsArray_RealTime, BUCKETS, 11.0F, Fade(color, 0.1F));
+    DrawSplineCatmullRom(pointsArray_RealTime, BUCKETS, 9.0F, Fade(color, 0.15F));
+    DrawSplineCatmullRom(pointsArray_RealTime, BUCKETS, 7.0F, Fade(color, 0.2F));
+    DrawSplineCatmullRom(pointsArray_RealTime, BUCKETS, 5.0F, Fade(color, 0.25F));
+    DrawSplineCatmullRom(pointsArray_RealTime, BUCKETS, 2.0F, Fade(WHITE, 1.0F));
 
 
-    delete[] pointsArray0;
-    delete[] pointsArray1;
-    delete[] pointsArray2;
-    delete[] pointsArray3;
-    delete[] pointsArray4;
+    delete[] pointsArray_RealTime;
+    delete[] spline_pointer;
+    delete[] pointsArray_Norm;
 
     // Diffuser Center circle
     //Vector2 center{
