@@ -1,4 +1,5 @@
 // Tirakat.cpp : This file contains the 'main' function. Program execution begins and ends there.
+// Ukhem Fahmi Thoriqul Haq : 31 - 03 - 2024
 //
 
 // MAYBE NEXT BIG TODO: ADD VISUALIZATION ?
@@ -70,8 +71,8 @@
 #include <string>
 #include <cassert>
 #include <algorithm>
-#include <cmath>
 #include <iomanip>
+//#include <cmath>
 
 #include <chrono>
 #include <thread>
@@ -297,8 +298,8 @@ float calculateMovingAverage(std::array<float, SMOOTHING_BUFFER_SIZE>& arr, int 
     return sum / size;
 }
 
-float min_frequency = 0.0F;
-float max_frequency = 22000.0F;
+float min_frequency = 10.0F;
+float max_frequency = 24000.0F;
 float bin_width = (max_frequency - min_frequency) / BUCKETS;
 
 float log_f_min = std::log10(min_frequency);
@@ -308,13 +309,17 @@ float delta_log = (log_f_max - log_f_min) / BUCKETS;
 void make_bins() {
     std::cout << std::fixed << std::setprecision(2);
     for (int i = 0; i <= BUCKETS; i++) {
-        Freq_Bin.at(i) = min_frequency + i * bin_width;
-        //Freq_Bin.at(i) = std::powf(10, log_f_min + i * delta_log);
-        //std::cout << Freq_Bin[i] << std::endl;
+        //Freq_Bin.at(i) = min_frequency + i * bin_width;
+        Freq_Bin.at(i) = std::powf(10, log_f_min + i * delta_log);
+        std::cout << Freq_Bin[i] << std::endl;
     }
 }
 
+float normalization(float val, float min_val, float max_val) {
+    if (min_val == max_val) return val;
 
+    return (val - min_val) / (max_val - min_val);
+}
 
 
 void InitFile(const std::filesystem::path& filename);
@@ -415,13 +420,6 @@ static std::vector<float> ExtractMusicData(std::string& filename) {
     // Jika input berupa file wav, perlu penguatan pada amplitude, sekitar 3 - 6 kali lipat.
 }
 
-float normalization(float data, float min_val, float max_val) {
-    if (min_val == max_val) return data;
-
-    float scaling_factor = 1.0F / (max_val - min_val);
-
-    return (data - min_val) * scaling_factor;
-}
 
 Vector2 mouse_position{};
 std::vector<Data> data{};
@@ -1208,7 +1206,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             setting_card.height - (pad * 2.0F),
             setting_card.height - (pad * 2.0F)
         };
-        //DrawRectangleRounded(delete_rect, 0.2F, 10, RED);
+        DrawRectangleRounded(delete_rect, 0.2F, 10, RED);
 
         icon_color = LIGHTGRAY;
         if (CheckCollisionPointRec(mouse_position, delete_rect)) {
@@ -2273,7 +2271,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         float real_num = (float)out[i][0];
         float imaginer = (float)out[i][1];
 
-        float amplitude = std::sqrt(real_num * real_num + imaginer + imaginer);
+        float amplitude = std::sqrt((real_num * real_num) + (imaginer * imaginer));
 
         min_amp = std::min(min_amp, amplitude);
         max_amp = std::max(max_amp, amplitude);
@@ -2283,10 +2281,11 @@ void DrawMainDisplay(Rectangle& panel_main)
         float real_num = (float)out[i][0];
         float imaginer = (float)out[i][1];
 
-        float amplitude = std::sqrt(real_num * real_num + imaginer + imaginer);
+        float amplitude = std::sqrt((real_num * real_num) + (imaginer * imaginer));
 
         for (int j = 0; j < BUCKETS; j++) {
-            float freq = min_frequency + i * bin_width;
+            //float freq = min_frequency + i * bin_width;
+            float freq = i * 48000/N;
             //float freq = std::powf(10, log_f_min + i * delta_log);
 
             if (freq >= Freq_Bin.at(j) && freq <= Freq_Bin.at(j + 1)) {
@@ -2345,7 +2344,6 @@ void DrawMainDisplay(Rectangle& panel_main)
         }
 
         Vector2 coor = { normalization(i, 0, BUCKETS - 1), (1 - final_amplitude) };
-        //pointsArray_Norm[i] = coor;
         pointsArray_Norm_smart[i] = coor;
 
         float bar_h = final_amplitude * panel_display.height * 0.65F;
@@ -2377,7 +2375,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         Vector2 startPos = { bar.x + bar.width / 2, (bar.y + bar.height) - bar_h };
         Vector2 endPos = { bar.x + bar.width / 2, (bar.y + bar.height) };
         float thick = 4.0F * sqrt(final_amplitude) * (bar_w * 0.10F);
-        //DrawLineEx(startPos, endPos, thick, color);
+        DrawLineEx(startPos, endPos, thick, color);
 
         Vector2 center_bins = { bar.x + bar.width / 2, bar.y };
         float radius = bar_w * sqrt(final_amplitude) * 1.25F * 2;
@@ -2505,7 +2503,7 @@ void DrawMainDisplay(Rectangle& panel_main)
     // Make Rectangle
     Rectangle base{ panel_display };
     int JUMLAH_RECT = 100;
-    double coef_rect = 0.955;
+    float coef_rect = 0.955;
     std::deque<Rectangle> landscape_rects{};
 
     for (int i = 0; i < JUMLAH_RECT; i++) {
@@ -2518,7 +2516,7 @@ void DrawMainDisplay(Rectangle& panel_main)
 
         landscape_rects.push_back(edited);
         //landscape_rects.push_front(edited);
-        coef_rect += 0.00015;
+        coef_rect += 0.00015F;
 
         base = edited;
 
@@ -2548,19 +2546,23 @@ void DrawMainDisplay(Rectangle& panel_main)
 
     
 
+    float thick = 1.0F;
     for (int i = 0; i < landscape_splines.size(); i++) {
         Rectangle rect = landscape_rects.at(i);
 
-        float thick = 0.75F;
         for (int j = 0; j < BUCKETS; j++) {
             spline_pointer_smart[j] = {
                 rect.x + rect.width * landscape_splines.at(i)[j].x,
                 rect.y + rect.height * landscape_splines.at(i)[j].y
             };
         }
-        DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, thick, LIGHTGRAY);
+        DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 6.0F * thick, Fade(SKYBLUE, thick / 4));
+        DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 1.25F * thick, LIGHTGRAY);
 
+        //DrawSplineBasis(spline_pointer_smart.get(), BUCKETS, thick, LIGHTGRAY);
         //DrawRectangleLinesEx(rect, .4F, BLUE);
+
+        thick *= 0.97F;
     }
 
     Color color = BLUE;
@@ -2569,7 +2571,7 @@ void DrawMainDisplay(Rectangle& panel_main)
     DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 10.0F, Fade(color, 0.15F));
     DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 7.0F, Fade(color, 0.2F));
     DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 5.0F, Fade(color, 0.25F));
-    DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 2.0F, Fade(WHITE, 1.0F));
+    DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 2.5F, Fade(WHITE, 1.0F));
 
 }
 
