@@ -309,8 +309,8 @@ float delta_log = (log_f_max - log_f_min) / BUCKETS;
 void make_bins() {
     std::cout << std::fixed << std::setprecision(2);
     for (int i = 0; i <= BUCKETS; i++) {
-        //Freq_Bin.at(i) = min_frequency + i * bin_width;
-        Freq_Bin.at(i) = std::powf(10, log_f_min + i * delta_log);
+        Freq_Bin.at(i) = min_frequency + i * bin_width;
+        //Freq_Bin.at(i) = std::powf(10, log_f_min + i * delta_log);
         std::cout << Freq_Bin[i] << std::endl;
     }
 }
@@ -2284,15 +2284,16 @@ void DrawMainDisplay(Rectangle& panel_main)
         float amplitude = std::sqrt((real_num * real_num) + (imaginer * imaginer));
 
         for (int j = 0; j < BUCKETS; j++) {
-            //float freq = min_frequency + i * bin_width;
-            float freq = i * 48000/N;
+            float freq = min_frequency + i * bin_width;
+            //float freq = i * 48000/N;
             //float freq = std::powf(10, log_f_min + i * delta_log);
 
             if (freq >= Freq_Bin.at(j) && freq <= Freq_Bin.at(j + 1)) {
-                Spectrum.at(j) = std::max(Spectrum.at(j), amplitude);
+                float val = normalization(amplitude, min_amp, max_amp);
+                Spectrum.at(j) = std::max(Spectrum.at(j), val);
 
                 if (amplitude > Peak.at(j).amplitude) {
-                    Peak.at(j).amplitude = amplitude;
+                    Peak.at(j).amplitude = val;
                     Peak.at(j).frequency_index = i;
                 }
 
@@ -2346,7 +2347,8 @@ void DrawMainDisplay(Rectangle& panel_main)
         Vector2 coor = { normalization(i, 0, BUCKETS - 1), (1 - final_amplitude) };
         pointsArray_Norm_smart[i] = coor;
 
-        float bar_h = final_amplitude * panel_display.height * 0.65F;
+        //float bar_h = final_amplitude * panel_display.height * 0.65F;
+        float bar_h = final_amplitude * panel_display.height * 0.9F;
         float bar_w = panel_display.width / BUCKETS;
 
         pad = bar_w * sqrtf(1 - final_amplitude) * 0.35F;
