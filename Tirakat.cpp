@@ -1622,6 +1622,7 @@ void DrawProgressTimeDomain(Rectangle& panel, float progress_w)
         float y2 = center - (-time_domain_signal.at(i)) * panel.height * 0.5F;
     
         if (x1 < progress) { 
+            //color = SKYBLUE;
             color = { 225, 225, 225, 255 };
             alpha = 1.0F;
         }
@@ -2233,10 +2234,10 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                 } 
 
                 if (CheckCollisionPointRec(mouse_position, delete_btn)) {
-                    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    time_down = 0.5F;
+                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
 
                         DeleteMusic(retFlag, p->option_music_order);
-                        time_down = 0.5F;
                         p->option_status = OFF;
 
 
@@ -2245,7 +2246,7 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
             }
 
             if (time_down >= 0.0F) time_down -= dt;
-            if (time_down <= 0.0F) if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) p->option_status = OFF;
+            if (time_down <= 0.0F) if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) p->option_status = OFF;
             
         }
 
@@ -2307,9 +2308,11 @@ void DeleteMusic(int& retFlag, size_t order)
     if (order >= 0 && order < data.size()) {
         data.erase(data.begin() + order);
 
-        if (order == data.size()) {
+        if (music_play > order) {
             order--;
+            music_play--;
         }
+
         if (Save()) TraceLog(LOG_INFO, "[SUCCESS] Delete Music");
 
         if (data.size() == 0) {
@@ -2321,7 +2324,6 @@ void DeleteMusic(int& retFlag, size_t order)
             }
         }
 
-
     }
     if (data.size() == 0) {
         p->page = PAGE_DRAG_DROP;
@@ -2331,6 +2333,8 @@ void DeleteMusic(int& retFlag, size_t order)
     }
 
     if (music_play == order) {
+        if (order != 0) music_play--;
+
         if (data.size() > 0) {
             // SAVE TO TXT AGAIN
             DetachAudioStreamProcessor(music.stream, callback);
@@ -2345,6 +2349,8 @@ void DeleteMusic(int& retFlag, size_t order)
             AttachAudioStreamProcessor(music.stream, callback);
         }
     }
+
+    
 }
 
 void ResetVisualizerParameter()
@@ -2501,7 +2507,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         Vector2 coor = { normalization(float(i), 0.0F, (BUCKETS - 1)), (1 - final_amplitude * 0.7F) };
         pointsArray_Norm_smart[i] = coor;
 
-        float bar_h = final_amplitude * panel_display.height * 0.7F;
+        float bar_h = final_amplitude * panel_display.height * 0.65F;
         //float bar_h = final_amplitude * panel_display.height * 0.9F;
         float bar_w = panel_display.width / BUCKETS;
 
