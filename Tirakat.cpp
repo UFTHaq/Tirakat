@@ -1,5 +1,6 @@
 // Tirakat.cpp : This file contains the 'main' function. Program execution begins and ends there.
-// Ukhem Fahmi Thoriqul Haq : 31 - 03 - 2024
+// Author : Ukhem Fahmi Thoriqul Haq 
+// Made : 31 - 03 - 2024
 //
 
 // MAYBE NEXT BIG TODO: ADD VISUALIZATION ?
@@ -96,6 +97,7 @@
 #define ICON_X_LOC          {"resources/Icons/X.png"}
 #define ICON_DELETE_LOC     {"resources/Icons/Trash.png"}
 #define ICON_MODE_LOC       {"resources/Icons/Mode.png"}
+//#define ICON_MODE_LOC       {"resources/Icons/Mode.png"}
 
 #define HUD_TIMER_SECS 1.5F
 #define PANEL_LEFT_WIDTH 275.0F
@@ -151,7 +153,6 @@ enum MODE {
     MODE_MAX_PEAK
 };
 
-
 struct Plug {
     int page{};
     int play{};
@@ -171,6 +172,8 @@ struct Plug {
     bool moving_save{ false };
     Shader circle{};
     Shader bubble{};
+    int option_status = OFF;
+    size_t option_music_order{};
 };
 
 Plug tirakat{};
@@ -202,7 +205,7 @@ const int BUCKETS{ 1 << 6 };
 std::array<float, BUCKETS> Spectrum{};
 std::array<float, BUCKETS + 1> Freq_Bin{};
 
-const int SMOOTHING_BUFFER_SIZE = 12;
+const int SMOOTHING_BUFFER_SIZE{ 12 };
 std::array<std::array<float, SMOOTHING_BUFFER_SIZE>, BUCKETS> prevAmplitude{};
 std::array<float, BUCKETS> smoothedAmplitude{};
 std::array<bool, BUCKETS> stronger{};
@@ -354,13 +357,17 @@ void DrawMedia(Rectangle& panel_media);
 
 void DrawVolume(Rectangle& panel_playpause, float button_panel);
 
-void DrawMusicList(Rectangle& panel_left);
+void DrawMusicList(Rectangle& panel_left, int& retFlag);
+
+void DeleteMusic(int& retFlag, size_t order);
 
 void ResetVisualizerParameter();
 
 void DrawMainDisplay(Rectangle& panel_main);
 
-void DrawMusicMode(Rectangle& panel_media, Rectangle& panel_main);
+void DrawFullscreenButton(Rectangle& panel_main, float dt);
+
+void DrawMusicPlayMode(Rectangle& panel_main, float dt);
 
 void DrawMusicProgress(Rectangle& panel_progress, float& music_volume);
 
@@ -387,7 +394,7 @@ static std::vector<float> ExtractMusicData(std::string& filename) {
         float sample = static_cast<float>(samples[i]) / 32768.0F; // assuming 16-bit signed integer.
         audio_data.push_back(sample);
     }
-    int total_frames = audio_data.size();
+    int total_frames = (int)audio_data.size();
 
     // Downsampling
     std::vector<float> processed_signal{};
@@ -1054,7 +1061,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         DrawMainDisplay(panel_main);
 
         // DRAWING PANEL MUSIC LIST
-        DrawMusicList(panel_music_list);
+        DrawMusicList(panel_music_list, retFlag);
 
         // DRAWING PANEL DURATION
         DrawDuration(panel_duration);
@@ -1068,525 +1075,519 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
 
 
 
-
-
         // BARU
     }
 
-
-
-
-    // SETTING PANEL
-    float button_w = panel_media.height;
-    float setting_card_w = 180.0F;
-    Rectangle setting_base_panel{
-        panel_main.x,
-        panel_main.y + panel_main.height - panel_media.height - 0,
-        button_w + setting_card_w + button_w,
-        button_w
-    };
-    //DrawRectangleRec(setting_base_panel, PANEL_COLOR);
-    float pad = 10.0F;
-    Rectangle setting_rect_icon{
-        setting_base_panel.x + (pad * 1),
-        setting_base_panel.y + (pad * 1),
-        button_w - (pad * 2),
-        button_w - (pad * 2),
-    };
-    //DrawRectangleRec(setting_rect_icon, RED);
-
-    Color icon_color = GRAY;
-    if (CheckCollisionPointRec(mouse_position, setting_rect_icon)) {
-        icon_color = RAYWHITE;
-        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-            setting_on = !setting_on;
-            popup_title = "Reset Target";
-        }
-    }
-
-    if (is_Draw_Icons()) {
-        float icon_size = 100.0F;
-        Rectangle dest = setting_rect_icon;
-        Rectangle source{ 0, 0, icon_size, icon_size };
-        //DrawTexturePro(SETTING_TEX, source, dest, { 0,0 }, 0, icon_color);
-    }
-
-    if (setting_on == ON) {
-        Rectangle setting_card_base{
-            setting_base_panel.x + button_w,
-            setting_base_panel.y,
-            setting_base_panel.width,
-            setting_base_panel.height
+    // need to diactivate for now, need to move it to new concept
+    if (false) {
+        // SETTING PANEL
+        float button_w = panel_media.height;
+        float setting_card_w = 180.0F;
+        Rectangle setting_base_panel{
+            panel_main.x,
+            panel_main.y + panel_main.height - panel_media.height - 0,
+            button_w + setting_card_w + button_w,
+            button_w
         };
-        //DrawRectangleRec(setting_card_base, LIGHTGRAY);
-
-        // DRAW SETTING CARD
-        pad = 5.0F;
-        Rectangle setting_card{
-            setting_card_base.x,
-            setting_card_base.y + (pad * 1),
-            setting_card_base.width - setting_card_base.height,
-            setting_card_base.height - (pad * 2)
+        //DrawRectangleRec(setting_base_panel, PANEL_COLOR);
+        float pad = 10.0F;
+        Rectangle setting_rect_icon{
+            setting_base_panel.x + (pad * 1),
+            setting_base_panel.y + (pad * 1),
+            button_w - (pad * 2),
+            button_w - (pad * 2),
         };
-        //DrawRectangleRec(setting_card, PANEL_COLOR);
-        DrawRectangleRounded(setting_card, 0.3F, 10, PANEL_COLOR);
+        //DrawRectangleRec(setting_rect_icon, RED);
 
-        // DRAW CENTER LINE
-        float line_h = setting_card.height * 0.7F;
-        float line_w = 5.0F;
-        Rectangle setting_center_line{
-            setting_card.x + ((setting_card.width - line_w) * (1.1F / 3.0F)),
-            setting_card.y + ((setting_card.height - line_h) / 2),
-            line_w,
-            line_h
-        };
-        DrawRectangleRounded(setting_center_line, 0.8F, 10, DARKGRAY);
-
-        // DRAW MUSIC TARGET NOW
-        pad = 5.0F;
-        Rectangle target_rect{
-            setting_card.x + (pad * 1.5F),
-            setting_card.y + (pad * 1),
-            setting_center_line.x - setting_card.x - (pad * 3.0F),
-            setting_card.height - (pad * 2)
-        };
-        //DrawRectangleRounded(target_rect, 0.5F, 10, DARKGRAY);
-        {
-            font = &font_number;
-            std::string target = std::to_string(data.at(music_play).target);
-            const char* text = target.c_str();
-            float font_size = target_rect.height * 0.9F;
-            float font_space = 0.0F;
-            Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-            Vector2 text_coor{
-                target_rect.x + (target_rect.width - text_measure.x) / 2,
-                target_rect.y + (target_rect.height - text_measure.y) / 2
-            };
-            DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
-        }
-        // DRAW RESET BUTTON
-        pad = 4.0F;
-        Rectangle reset_rect{
-            (setting_center_line.x + setting_center_line.width) + 5 + (pad * 1.5F),
-            setting_card.y + (pad * 1.25F),
-            setting_center_line.x - setting_card.x + 10 - (pad * 3.0F),
-            setting_card.height - (pad * 2.5F)
-        };
-        DrawRectangleRounded(reset_rect, 0.5F, 10, BLUE_BUTTON_COLOR);
-
-        Color font_color = LIGHTGRAY;
-        float font_coef = 0.8F;
-        font = &font_s_semibold;
-        if (CheckCollisionPointRec(mouse_position, reset_rect)) {
-            font_coef = 0.825F;
-            font_color = WHITE;
-            font = &font_s_bold;
+        Color icon_color = GRAY;
+        if (CheckCollisionPointRec(mouse_position, setting_rect_icon)) {
+            icon_color = RAYWHITE;
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                popup_on = !popup_on;
+                setting_on = !setting_on;
+                popup_title = "Reset Target";
             }
         }
 
-        {
-            const char* text = "RESET";
-            float font_size = reset_rect.height * font_coef;
-            float font_space = 0.0F;
-            Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-            Vector2 text_coor{
-                reset_rect.x + (reset_rect.width - text_measure.x) / 2,
-                reset_rect.y + (reset_rect.height - text_measure.y) / 2
-            };
-            DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
-        }
-
-        // DRAW DELELE RECT
-        pad = 5.0F;
-        Rectangle delete_rect{
-            setting_card.x + setting_card.width - setting_base_panel.height + 5 + (pad * 1.0F),
-            setting_card.y + (pad * 1.0F),
-            setting_card.height - (pad * 2.0F),
-            setting_card.height - (pad * 2.0F)
-        };
-        DrawRectangleRounded(delete_rect, 0.2F, 10, RED);
-
-        icon_color = LIGHTGRAY;
-        if (CheckCollisionPointRec(mouse_position, delete_rect)) {
-            icon_color = RED;
-            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-
-                if (music_play >= 0 && music_play < data.size()) {
-                    data.erase(data.begin() + music_play);
-
-                    if (music_play == data.size()) {
-                        music_play--;
-                    }
-                    if (Save()) TraceLog(LOG_INFO, "[SUCCESS] Delete Music");
-
-                    if (data.size() == 0) {
-                        std::ofstream file(data_txt);
-                        if (file.is_open()) {
-                            file << "0";
-                            file.close();
-                            FileZeroDataCheck(data_txt);
-                        }
-                    }
-
-
-                }
-                if (data.size() == 0) {
-                    p->page = PAGE_DRAG_DROP;
-                    zero_data = true;
-                    { retFlag = 2; return; };
-                    //goto drag_drop_label;
-                }
-
-                if (data.size() > 0) {
-                    // SAVE TO TXT AGAIN
-                    DetachAudioStreamProcessor(music.stream, callback);
-                    ResetVisualizerParameter();
-
-                    music = LoadMusicStream(data.at(music_play).path.c_str());
-                    time_domain_signal = ExtractMusicData(data.at(music_play).path);
-
-                    p->reset_time = true;
-                    setting_on = OFF;
-
-                    AttachAudioStreamProcessor(music.stream, callback);
-                }
-
-            }
-        }
-        else {
-            icon_color = LIGHTGRAY;
-        }
-
-        {
+        if (is_Draw_Icons()) {
             float icon_size = 100.0F;
-            Rectangle dest = delete_rect;
+            Rectangle dest = setting_rect_icon;
             Rectangle source{ 0, 0, icon_size, icon_size };
-            DrawTexturePro(DELETE_TEX, source, dest, { 0,0 }, 0, icon_color);
+            //DrawTexturePro(SETTING_TEX, source, dest, { 0,0 }, 0, icon_color);
         }
 
-        // DRAW POPUP RESET TARGET
-        std::string name{ data.at(music_play).name };
-        size_t size_name = name.size();
-        std::string popup_name{ data.at(music_play).name.substr(0, 25) };
-        std::string popup_old_target{ std::to_string(data.at(music_play).target) };
-        if (popup_on == ON) {
+        if (setting_on == ON) {
+            Rectangle setting_card_base{
+                setting_base_panel.x + button_w,
+                setting_base_panel.y,
+                setting_base_panel.width,
+                setting_base_panel.height
+            };
+            //DrawRectangleRec(setting_card_base, LIGHTGRAY);
 
-            float popup_w = 360.0F;
-            float popup_h = popup_w / 2;
-            Rectangle popup_card{
-                panel_main.x + ((panel_main.width - popup_w) / 2),
-                panel_main.y + ((panel_main.height - popup_h) / 2),
-                popup_w,
-                popup_h
+            // DRAW SETTING CARD
+            pad = 5.0F;
+            Rectangle setting_card{
+                setting_card_base.x,
+                setting_card_base.y + (pad * 1),
+                setting_card_base.width - setting_card_base.height,
+                setting_card_base.height - (pad * 2)
             };
-            DrawRectangleRounded(popup_card, 0.1F, 10, POPUP_CARD_COLOR);
+            //DrawRectangleRec(setting_card, PANEL_COLOR);
+            DrawRectangleRounded(setting_card, 0.3F, 10, PANEL_COLOR);
 
-            // TOP PANEL
-            float pad = 7.0F;
-            Rectangle popup_top_panel{
-                popup_card.x,
-                popup_card.y,
-                popup_card.width,
-                (popup_card.height * 1 / 4) - (pad * 1)
+            // DRAW CENTER LINE
+            float line_h = setting_card.height * 0.7F;
+            float line_w = 5.0F;
+            Rectangle setting_center_line{
+                setting_card.x + ((setting_card.width - line_w) * (1.1F / 3.0F)),
+                setting_card.y + ((setting_card.height - line_h) / 2),
+                line_w,
+                line_h
             };
-            //DrawRectangleRounded(popup_top_panel, 0.4F, 10, DARKGRAY);
-            // DRAW TITLE
-            Rectangle title_rect{
-                popup_top_panel.x,
-                popup_top_panel.y,
-                popup_top_panel.width - popup_top_panel.height,
-                popup_top_panel.height
+            DrawRectangleRounded(setting_center_line, 0.8F, 10, DARKGRAY);
+
+            // DRAW MUSIC TARGET NOW
+            pad = 5.0F;
+            Rectangle target_rect{
+                setting_card.x + (pad * 1.5F),
+                setting_card.y + (pad * 1),
+                setting_center_line.x - setting_card.x - (pad * 3.0F),
+                setting_card.height - (pad * 2)
             };
-            //DrawRectangleRounded(title_rect, 0.4F, 10, BLUE);
+            //DrawRectangleRounded(target_rect, 0.5F, 10, DARKGRAY);
             {
-                font = &font_s_bold;
-                font_color = BLACK;
-                const char* text = popup_title.c_str();
-                float font_size = title_rect.height * 0.7F;
+                font = &font_number;
+                std::string target = std::to_string(data.at(music_play).target);
+                const char* text = target.c_str();
+                float font_size = target_rect.height * 0.9F;
                 float font_space = 0.0F;
                 Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
                 Vector2 text_coor{
-                    title_rect.x + 10.0F,
-                    title_rect.y + (title_rect.height - text_measure.y) / 2
+                    target_rect.x + (target_rect.width - text_measure.x) / 2,
+                    target_rect.y + (target_rect.height - text_measure.y) / 2
+                };
+                DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
+            }
+            // DRAW RESET BUTTON
+            pad = 4.0F;
+            Rectangle reset_rect{
+                (setting_center_line.x + setting_center_line.width) + 5 + (pad * 1.5F),
+                setting_card.y + (pad * 1.25F),
+                setting_center_line.x - setting_card.x + 10 - (pad * 3.0F),
+                setting_card.height - (pad * 2.5F)
+            };
+            DrawRectangleRounded(reset_rect, 0.5F, 10, BLUE_BUTTON_COLOR);
+
+            Color font_color = LIGHTGRAY;
+            float font_coef = 0.8F;
+            font = &font_s_semibold;
+            if (CheckCollisionPointRec(mouse_position, reset_rect)) {
+                font_coef = 0.825F;
+                font_color = WHITE;
+                font = &font_s_bold;
+                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                    popup_on = !popup_on;
+                }
+            }
+
+            {
+                const char* text = "RESET";
+                float font_size = reset_rect.height * font_coef;
+                float font_space = 0.0F;
+                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+                Vector2 text_coor{
+                    reset_rect.x + (reset_rect.width - text_measure.x) / 2,
+                    reset_rect.y + (reset_rect.height - text_measure.y) / 2
                 };
                 DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
             }
 
-
-            // DRAW X BUTTON
-            pad = 7.0F;
-            Rectangle x_rect_base{
-                (popup_top_panel.x + popup_top_panel.width - popup_top_panel.height) + (pad * 1),
-                popup_top_panel.y + (pad * 1),
-                popup_top_panel.height - (pad * 2),
-                popup_top_panel.height - (pad * 2)
+            // DRAW DELELE RECT
+            pad = 5.0F;
+            Rectangle delete_rect{
+                setting_card.x + setting_card.width - setting_base_panel.height + 5 + (pad * 1.0F),
+                setting_card.y + (pad * 1.0F),
+                setting_card.height - (pad * 2.0F),
+                setting_card.height - (pad * 2.0F)
             };
-            DrawRectangleRounded(x_rect_base, 0.4F, 10, POPUP_X_COLOR);
+            DrawRectangleRounded(delete_rect, 0.2F, 10, RED);
 
-            float x_pad = 1.5F;
             icon_color = LIGHTGRAY;
-            if (CheckCollisionPointRec(mouse_position, x_rect_base)) {
-                icon_color = RAYWHITE;
-                x_pad = 0.0F;
+            if (CheckCollisionPointRec(mouse_position, delete_rect)) {
+                icon_color = RED;
                 if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                    popup_on = OFF;
+
+                    if (music_play >= 0 && music_play < data.size()) {
+                        data.erase(data.begin() + music_play);
+
+                        if (music_play == data.size()) {
+                            music_play--;
+                        }
+                        if (Save()) TraceLog(LOG_INFO, "[SUCCESS] Delete Music");
+
+                        if (data.size() == 0) {
+                            std::ofstream file(data_txt);
+                            if (file.is_open()) {
+                                file << "0";
+                                file.close();
+                                FileZeroDataCheck(data_txt);
+                            }
+                        }
+
+
+                    }
+                    if (data.size() == 0) {
+                        p->page = PAGE_DRAG_DROP;
+                        zero_data = true;
+                        { retFlag = 2; return; };
+                        //goto drag_drop_label;
+                    }
+
+                    if (data.size() > 0) {
+                        // SAVE TO TXT AGAIN
+                        DetachAudioStreamProcessor(music.stream, callback);
+                        ResetVisualizerParameter();
+
+                        music = LoadMusicStream(data.at(music_play).path.c_str());
+                        time_domain_signal = ExtractMusicData(data.at(music_play).path);
+
+                        p->reset_time = true;
+                        setting_on = OFF;
+
+                        AttachAudioStreamProcessor(music.stream, callback);
+                    }
+
                 }
             }
             else {
                 icon_color = LIGHTGRAY;
             }
-            Rectangle x_rect{
-                x_rect_base.x + (x_pad * 1),
-                x_rect_base.y + (x_pad * 1),
-                x_rect_base.height - (x_pad * 2),
-                x_rect_base.height - (x_pad * 2)
-            };
 
             {
                 float icon_size = 100.0F;
-                Rectangle dest = x_rect;
+                Rectangle dest = delete_rect;
                 Rectangle source{ 0, 0, icon_size, icon_size };
-                DrawTexturePro(X_TEX, source, dest, { 0,0 }, 0, icon_color);
+                DrawTexturePro(DELETE_TEX, source, dest, { 0,0 }, 0, icon_color);
             }
 
-            // DRAW BODY
-            pad = 7.0F;
-            Rectangle popup_body{
-                (popup_top_panel.x) + (pad * 1),
-                (popup_top_panel.y + popup_top_panel.height) - (pad * 0),
-                (popup_card.width) - (pad * 2),
-                (popup_card.height * 3 / 4) - (pad * 0)
-            };
-            DrawRectangleRounded(popup_body, 0.1F, 10, POPUP_BODY_COLOR);
+            // DRAW POPUP RESET TARGET
+            std::string name{ data.at(music_play).name };
+            size_t size_name = name.size();
+            std::string popup_name{ data.at(music_play).name.substr(0, 25) };
+            std::string popup_old_target{ std::to_string(data.at(music_play).target) };
+            if (popup_on == ON) {
 
-            // DRAW NAME : OLD TARGET
-            {
-                std::string cpp_text{};
-                if (size_name > 25) cpp_text = popup_name + "..  :  " + popup_old_target;
-                else cpp_text = popup_name + "  :  " + popup_old_target;
-
-                font = &font_s_bold;
-                font_color = BLACK;
-                const char* text = cpp_text.c_str();
-                float font_size = title_rect.height * 0.725F;
-                float font_space = -0.25F;
-                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-                Vector2 text_coor{
-                    popup_body.x + (popup_body.width - text_measure.x) / 2,
-                    popup_body.y + (55.0F - text_measure.y) / 2
+                float popup_w = 360.0F;
+                float popup_h = popup_w / 2;
+                Rectangle popup_card{
+                    panel_main.x + ((panel_main.width - popup_w) / 2),
+                    panel_main.y + ((panel_main.height - popup_h) / 2),
+                    popup_w,
+                    popup_h
                 };
-                DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
-            }
+                DrawRectangleRounded(popup_card, 0.1F, 10, POPUP_CARD_COLOR);
 
-            // DRAW Enter new target & INPUT BOX
-            float input_w = 140.0F;
-            float input_h = 37.5F;
-            Rectangle input_rect{
-                popup_body.x + (popup_body.width / 2),
-                popup_body.y + ((popup_body.height - input_h) / 2),
-                input_w,
-                input_h
-            };
-            DrawRectangleRec(input_rect, RAYWHITE);
-
-            {
-                std::string cpp_text = "Enter new target";
-                font = &font_s_reg;
-                font_color = BLACK;
-                const char* text = cpp_text.c_str();
-                float font_size = input_rect.height * 0.725F;
-                float font_space = 0.0F;
-                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-                Vector2 text_coor{
-                    popup_body.x + (popup_w / 10),
-                    popup_body.y + (popup_body.height - text_measure.y) / 2
+                // TOP PANEL
+                float pad = 7.0F;
+                Rectangle popup_top_panel{
+                    popup_card.x,
+                    popup_card.y,
+                    popup_card.width,
+                    (popup_card.height * 1 / 4) - (pad * 1)
                 };
-                DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
-            }
-
-            static bool mouse_on_card{ false };
-            static int frames_counter{ 0 };
-            int max_input_chars{ 4 };
-
-            if (CheckCollisionPointRec(mouse_position, input_rect)) {
-                p->mouse_cursor = MOUSE_CURSOR_IBEAM;
-                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                    mouse_on_card = true;
-                }
-            }
-            else {
-                p->mouse_cursor = MOUSE_CURSOR_DEFAULT;
-            }
-
-            if (!CheckCollisionPointRec(mouse_position, input_rect)) {
-                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                    mouse_on_card = false;
-                }
-            }
-
-            letter_size = input.size();
-            if (mouse_on_card) {
-                frames_counter++;
-                int key = GetCharPressed();
-
-                while (key > 0) {
-                    if ((key >= KEY_ZERO) && (key <= KEY_NINE) && (letter_size < max_input_chars)) {
-                        input += static_cast<char>(key);
-                    }
-                    key = GetCharPressed();
-                }
-
-                if (letter_size > 0) {
-                    if (IsKeyPressed(KEY_BACKSPACE)) {
-                        input.pop_back();
-                    }
-
-                    if (IsKeyPressed(KEY_ENTER)) {
-                        ApplyInputReset(input, popup_on, name, setting_on);
-                    }
-                }
-                else {
-                    if (IsKeyPressed(KEY_ENTER)) {
-                        setting_on = OFF;
-                    }
-                }
-
-
-            }
-            else {
-                frames_counter = 0;
-            }
-
-            {
-                // DRAW INPUT
-                font = &font_number;
-                const char* input_text = input.c_str();
-                float font_size_input = input_rect.height * 0.7F;
-                float font_space_input = 1.0F;
-                Vector2 input_measure = MeasureTextEx(*font, input_text, font_size_input, font_space_input);
-                Vector2 input_coor{
-                    input_rect.x + 8,
-                    input_rect.y + (input_rect.height - input_measure.y) / 2
+                //DrawRectangleRounded(popup_top_panel, 0.4F, 10, DARKGRAY);
+                // DRAW TITLE
+                Rectangle title_rect{
+                    popup_top_panel.x,
+                    popup_top_panel.y,
+                    popup_top_panel.width - popup_top_panel.height,
+                    popup_top_panel.height
                 };
-                DrawTextEx(*font, input_text, input_coor, font_size_input, font_space_input, font_color);
-
-                if (mouse_on_card) {
-                    DrawRectangleLinesEx(input_rect, 1.5F, POPUP_CARD_COLOR);
-
-                    //if (letter_size < max_input_chars) {
-                    if (((frames_counter / 30) % 2) == 0) {
-                        // blinking cursor
-                        font = &font_number;
-                        const char* text = "|";
-                        float font_size = input_rect.height * 0.8F;
-                        float font_space = 0.0F;
-                        Vector2 text_measure = MeasureTextEx(*font, input_text, font_size_input, font_space_input);
-                        Vector2 text_coor{
-                            input_coor.x + (text_measure.x) - 2.0F,
-                            input_rect.y + ((input_rect.height - text_measure.y) / 2) - 4.35F
-                        };
-                        DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
-                    }
-                    //}
-                }
-            }
-
-
-            // DRAW APPLY & CANCEL
-            float bottom_w = 140.0F;
-            float bottom_h = 30.0F;
-            Rectangle bottom_row{
-                popup_body.x + popup_body.width - bottom_w - 10,
-                popup_body.y + popup_body.height - bottom_h - 10,
-                bottom_w,
-                bottom_h
-            };
-            //DrawRectangleRec(bottom_row, DARKGRAY);
-
-            // BUTTON APPLY
-            float button_w = 65.0F;
-            float button_h = bottom_h;
-            Rectangle apply_rect{
-                bottom_row.x,
-                bottom_row.y,
-                button_w,
-                button_h
-            };
-            DrawRectangleRounded(apply_rect, 0.2F, 10, POPUP_APPLY_COLOR);
-
-            {
-                font_color = RAYWHITE;
-                font_coef = 0.8F;
-                font = &font_s_reg;
-                if (CheckCollisionPointRec(mouse_position, apply_rect)) {
-                    font_coef = 0.825F;
-                    font_color = WHITE;
-                    font = &font_s_semibold;
-                    if (letter_size > 0) {
-                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                            ApplyInputReset(input, popup_on, name, setting_on);
-                        }
-
-                    }
+                //DrawRectangleRounded(title_rect, 0.4F, 10, BLUE);
+                {
+                    font = &font_s_bold;
+                    font_color = BLACK;
+                    const char* text = popup_title.c_str();
+                    float font_size = title_rect.height * 0.7F;
+                    float font_space = 0.0F;
+                    Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+                    Vector2 text_coor{
+                        title_rect.x + 10.0F,
+                        title_rect.y + (title_rect.height - text_measure.y) / 2
+                    };
+                    DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
                 }
 
-                const char* text = "Apply";
-                float font_size = apply_rect.height * font_coef;
-                float font_space = 0.0F;
-                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-                Vector2 text_coor{
-                    apply_rect.x + (apply_rect.width - text_measure.x) / 2,
-                    apply_rect.y + (apply_rect.height - text_measure.y) / 2
+
+                // DRAW X BUTTON
+                pad = 7.0F;
+                Rectangle x_rect_base{
+                    (popup_top_panel.x + popup_top_panel.width - popup_top_panel.height) + (pad * 1),
+                    popup_top_panel.y + (pad * 1),
+                    popup_top_panel.height - (pad * 2),
+                    popup_top_panel.height - (pad * 2)
                 };
-                DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
-            }
+                DrawRectangleRounded(x_rect_base, 0.4F, 10, POPUP_X_COLOR);
 
-            // BUTTON CANCEL
-            Rectangle cancel_rect{
-                bottom_row.x + bottom_row.width - button_w,
-                bottom_row.y,
-                button_w,
-                button_h
-            };
-            DrawRectangleRounded(cancel_rect, 0.2F, 10, POPUP_CANCEL_COLOR);
-
-            {
-                font_color = RAYWHITE;
-                font_coef = 0.8F;
-                font = &font_s_reg;
-                if (CheckCollisionPointRec(mouse_position, cancel_rect)) {
-                    font_coef = 0.825F;
-                    font_color = WHITE;
-                    font = &font_s_semibold;
+                float x_pad = 1.5F;
+                icon_color = LIGHTGRAY;
+                if (CheckCollisionPointRec(mouse_position, x_rect_base)) {
+                    icon_color = RAYWHITE;
+                    x_pad = 0.0F;
                     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                         popup_on = OFF;
                     }
                 }
-
-                const char* text = "Cancel";
-                float font_size = cancel_rect.height * font_coef;
-                float font_space = 0.0F;
-                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-                Vector2 text_coor{
-                    cancel_rect.x + (cancel_rect.width - text_measure.x) / 2,
-                    cancel_rect.y + (cancel_rect.height - text_measure.y) / 2
+                else {
+                    icon_color = LIGHTGRAY;
+                }
+                Rectangle x_rect{
+                    x_rect_base.x + (x_pad * 1),
+                    x_rect_base.y + (x_pad * 1),
+                    x_rect_base.height - (x_pad * 2),
+                    x_rect_base.height - (x_pad * 2)
                 };
-                DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
+
+                {
+                    float icon_size = 100.0F;
+                    Rectangle dest = x_rect;
+                    Rectangle source{ 0, 0, icon_size, icon_size };
+                    DrawTexturePro(X_TEX, source, dest, { 0,0 }, 0, icon_color);
+                }
+
+                // DRAW BODY
+                pad = 7.0F;
+                Rectangle popup_body{
+                    (popup_top_panel.x) + (pad * 1),
+                    (popup_top_panel.y + popup_top_panel.height) - (pad * 0),
+                    (popup_card.width) - (pad * 2),
+                    (popup_card.height * 3 / 4) - (pad * 0)
+                };
+                DrawRectangleRounded(popup_body, 0.1F, 10, POPUP_BODY_COLOR);
+
+                // DRAW NAME : OLD TARGET
+                {
+                    std::string cpp_text{};
+                    if (size_name > 25) cpp_text = popup_name + "..  :  " + popup_old_target;
+                    else cpp_text = popup_name + "  :  " + popup_old_target;
+
+                    font = &font_s_bold;
+                    font_color = BLACK;
+                    const char* text = cpp_text.c_str();
+                    float font_size = title_rect.height * 0.725F;
+                    float font_space = -0.25F;
+                    Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+                    Vector2 text_coor{
+                        popup_body.x + (popup_body.width - text_measure.x) / 2,
+                        popup_body.y + (55.0F - text_measure.y) / 2
+                    };
+                    DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
+                }
+
+                // DRAW Enter new target & INPUT BOX
+                float input_w = 140.0F;
+                float input_h = 37.5F;
+                Rectangle input_rect{
+                    popup_body.x + (popup_body.width / 2),
+                    popup_body.y + ((popup_body.height - input_h) / 2),
+                    input_w,
+                    input_h
+                };
+                DrawRectangleRec(input_rect, RAYWHITE);
+
+                {
+                    std::string cpp_text = "Enter new target";
+                    font = &font_s_reg;
+                    font_color = BLACK;
+                    const char* text = cpp_text.c_str();
+                    float font_size = input_rect.height * 0.725F;
+                    float font_space = 0.0F;
+                    Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+                    Vector2 text_coor{
+                        popup_body.x + (popup_w / 10),
+                        popup_body.y + (popup_body.height - text_measure.y) / 2
+                    };
+                    DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
+                }
+
+                static bool mouse_on_card{ false };
+                static int frames_counter{ 0 };
+                int max_input_chars{ 4 };
+
+                if (CheckCollisionPointRec(mouse_position, input_rect)) {
+                    p->mouse_cursor = MOUSE_CURSOR_IBEAM;
+                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                        mouse_on_card = true;
+                    }
+                }
+                else {
+                    p->mouse_cursor = MOUSE_CURSOR_DEFAULT;
+                }
+
+                if (!CheckCollisionPointRec(mouse_position, input_rect)) {
+                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                        mouse_on_card = false;
+                    }
+                }
+
+                letter_size = input.size();
+                if (mouse_on_card) {
+                    frames_counter++;
+                    int key = GetCharPressed();
+
+                    while (key > 0) {
+                        if ((key >= KEY_ZERO) && (key <= KEY_NINE) && (letter_size < max_input_chars)) {
+                            input += static_cast<char>(key);
+                        }
+                        key = GetCharPressed();
+                    }
+
+                    if (letter_size > 0) {
+                        if (IsKeyPressed(KEY_BACKSPACE)) {
+                            input.pop_back();
+                        }
+
+                        if (IsKeyPressed(KEY_ENTER)) {
+                            ApplyInputReset(input, popup_on, name, setting_on);
+                        }
+                    }
+                    else {
+                        if (IsKeyPressed(KEY_ENTER)) {
+                            setting_on = OFF;
+                        }
+                    }
+
+
+                }
+                else {
+                    frames_counter = 0;
+                }
+
+                {
+                    // DRAW INPUT
+                    font = &font_number;
+                    const char* input_text = input.c_str();
+                    float font_size_input = input_rect.height * 0.7F;
+                    float font_space_input = 1.0F;
+                    Vector2 input_measure = MeasureTextEx(*font, input_text, font_size_input, font_space_input);
+                    Vector2 input_coor{
+                        input_rect.x + 8,
+                        input_rect.y + (input_rect.height - input_measure.y) / 2
+                    };
+                    DrawTextEx(*font, input_text, input_coor, font_size_input, font_space_input, font_color);
+
+                    if (mouse_on_card) {
+                        DrawRectangleLinesEx(input_rect, 1.5F, POPUP_CARD_COLOR);
+
+                        //if (letter_size < max_input_chars) {
+                        if (((frames_counter / 30) % 2) == 0) {
+                            // blinking cursor
+                            font = &font_number;
+                            const char* text = "|";
+                            float font_size = input_rect.height * 0.8F;
+                            float font_space = 0.0F;
+                            Vector2 text_measure = MeasureTextEx(*font, input_text, font_size_input, font_space_input);
+                            Vector2 text_coor{
+                                input_coor.x + (text_measure.x) - 2.0F,
+                                input_rect.y + ((input_rect.height - text_measure.y) / 2) - 4.35F
+                            };
+                            DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
+                        }
+                        //}
+                    }
+                }
+
+
+                // DRAW APPLY & CANCEL
+                float bottom_w = 140.0F;
+                float bottom_h = 30.0F;
+                Rectangle bottom_row{
+                    popup_body.x + popup_body.width - bottom_w - 10,
+                    popup_body.y + popup_body.height - bottom_h - 10,
+                    bottom_w,
+                    bottom_h
+                };
+                //DrawRectangleRec(bottom_row, DARKGRAY);
+
+                // BUTTON APPLY
+                float button_w = 65.0F;
+                float button_h = bottom_h;
+                Rectangle apply_rect{
+                    bottom_row.x,
+                    bottom_row.y,
+                    button_w,
+                    button_h
+                };
+                DrawRectangleRounded(apply_rect, 0.2F, 10, POPUP_APPLY_COLOR);
+
+                {
+                    font_color = RAYWHITE;
+                    font_coef = 0.8F;
+                    font = &font_s_reg;
+                    if (CheckCollisionPointRec(mouse_position, apply_rect)) {
+                        font_coef = 0.825F;
+                        font_color = WHITE;
+                        font = &font_s_semibold;
+                        if (letter_size > 0) {
+                            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                                ApplyInputReset(input, popup_on, name, setting_on);
+                            }
+
+                        }
+                    }
+
+                    const char* text = "Apply";
+                    float font_size = apply_rect.height * font_coef;
+                    float font_space = 0.0F;
+                    Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+                    Vector2 text_coor{
+                        apply_rect.x + (apply_rect.width - text_measure.x) / 2,
+                        apply_rect.y + (apply_rect.height - text_measure.y) / 2
+                    };
+                    DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
+                }
+
+                // BUTTON CANCEL
+                Rectangle cancel_rect{
+                    bottom_row.x + bottom_row.width - button_w,
+                    bottom_row.y,
+                    button_w,
+                    button_h
+                };
+                DrawRectangleRounded(cancel_rect, 0.2F, 10, POPUP_CANCEL_COLOR);
+
+                {
+                    font_color = RAYWHITE;
+                    font_coef = 0.8F;
+                    font = &font_s_reg;
+                    if (CheckCollisionPointRec(mouse_position, cancel_rect)) {
+                        font_coef = 0.825F;
+                        font_color = WHITE;
+                        font = &font_s_semibold;
+                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                            popup_on = OFF;
+                        }
+                    }
+
+                    const char* text = "Cancel";
+                    float font_size = cancel_rect.height * font_coef;
+                    float font_space = 0.0F;
+                    Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+                    Vector2 text_coor{
+                        cancel_rect.x + (cancel_rect.width - text_measure.x) / 2,
+                        cancel_rect.y + (cancel_rect.height - text_measure.y) / 2
+                    };
+                    DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
+                }
             }
         }
+
+        if (setting_on == OFF) {
+            input.clear();
+        }
+
     }
 
-    if (setting_on == OFF) {
-        input.clear();
-    }
-
-    // Draw Music Mode
-    //DrawMusicMode(panel_media, panel_main);
-
-    // Draw Music Progress
-    //DrawMusicProgress(panel_progress, music_volume);
 }
 
 void DrawProgressTimeDomain(Rectangle& panel, float progress_w)
@@ -1847,7 +1848,7 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
     }
 }
 
-void DrawMusicList(Rectangle& panel)
+void DrawMusicList(Rectangle& panel, int& retFlag)
 {
     // INNER PANEL LEFT
     Rectangle panel_list_boundary{
@@ -1972,22 +1973,27 @@ void DrawMusicList(Rectangle& panel)
                         else {
                             double_click_detected = false;
                             // Optional : Handle single click event if i want
-                            content_preveiw = i;
+                            content_preveiw = int(i);
                             //DrawRectangleLinesEx(content, 2.0, ORANGE);
                         }
                         last_click_time = current_time;
+                    }
+                    else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+                        p->option_status = ON;
+                        p->option_music_order = i;
                     }
                     else {
                         double_click_detected = false;
                     }
                 }
 
+
                 if (CheckCollisionPointRec(mouse_position, moving_boundary)) {
 
                     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                         if (CheckCollisionPointRec(mouse_position, content)) {
                             //color_content = BLACK;
-                            selected_index = i;
+                            selected_index = int(i);
                             selected_data = data.at(selected_index);
                             y_while_selected = content.y + (content.height * 0.5F) + content_scroll;
                             clicked_in_moving_boundary = true;
@@ -2115,6 +2121,15 @@ void DrawMusicList(Rectangle& panel)
             color_font = BLACK;
         }
 
+        if (p->option_status == ON) {
+            if (i == p->option_music_order) {
+                //color_content = ORANGE;
+                color_content = { 190, 76, 45, 255 };
+                //color_content = { 105, 220, 57, 127 };
+            }
+        }
+
+
         DrawRectangleRounded(content, 0.2F, 10, color_content);
 
         font = &font_s_semibold;
@@ -2138,6 +2153,101 @@ void DrawMusicList(Rectangle& panel)
             content.y + (content.height - text_measure.y) / 2,
         };
         DrawTextEx(*font, text, text_coor, font_size, font_space, color_font);
+
+
+        if (p->option_status == ON) {
+
+            static float time_down = {};
+            float dt = GetFrameTime();
+
+            if (i == p->option_music_order) {
+                float option_panel_width = content.width * 0.325F;
+                Rectangle option_panel{
+                    content.x + content.width - option_panel_width,
+                    content.y,
+                    option_panel_width,
+                    content.height
+                };
+                DrawRectangleRounded(option_panel, 0.2F, 10, LIGHTGRAY);
+                float btn_base_width = option_panel_width * 0.85F;
+                Rectangle btn_base{
+                    option_panel.x + (option_panel.width - btn_base_width) / 2,
+                    option_panel.y,
+                    btn_base_width,
+                    option_panel.height
+                };
+                //DrawRectangleRec(btn_base, GRAY);
+
+                float btn_width = btn_base_width * 0.475F;
+                float y_pos = btn_base.y;
+                if (btn_width < btn_base.height) {
+                    float pad = btn_base.height - btn_width;
+                    y_pos = btn_base.y + (pad / 2);
+                }
+                else btn_width = btn_base.height;
+
+                Rectangle setting_btn{
+                    btn_base.x,
+                    y_pos,
+                    btn_width,
+                    btn_width
+                };
+                Rectangle delete_btn{
+                    btn_base.x + btn_base_width - btn_width,
+                    y_pos,
+                    btn_width,
+                    btn_width
+                };
+
+
+                if (CheckCollisionPointRec(mouse_position, setting_btn)) {
+                    DrawRectangleRounded(setting_btn, 0.2F, 10, Fade(WHITE, 0.75F));
+                }
+
+                if (CheckCollisionPointRec(mouse_position, delete_btn)) {
+                    DrawRectangleRounded(delete_btn, 0.2F, 10, Fade(WHITE, 0.75F));
+                }
+
+
+                // DRAW SETTING ICON
+                {
+                    float icon_size = 100.0F;
+                    Rectangle dest = setting_btn;
+                    Rectangle source = { 0, 0, icon_size, icon_size };
+                    DrawTexturePro(SETTING_TEX, source, dest, { 0,0 }, 0, BLACK);
+                }
+                
+                // DRAW DELETE ICON
+                {
+                    float icon_size = 100.0F;
+                    Rectangle dest = delete_btn;
+                    Rectangle source = { 0, 0, icon_size, icon_size };
+                    DrawTexturePro(DELETE_TEX, source, dest, { 0,0 }, 0, color_content);
+                }
+
+
+                if (CheckCollisionPointRec(mouse_position, setting_btn)) {
+                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                        //setting_on = ON;
+                    }
+                } 
+
+                if (CheckCollisionPointRec(mouse_position, delete_btn)) {
+                    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+
+                        DeleteMusic(retFlag, p->option_music_order);
+                        time_down = 0.5F;
+                        p->option_status = OFF;
+
+
+                    }
+                }
+            }
+
+            if (time_down >= 0.0F) time_down -= dt;
+            if (time_down <= 0.0F) if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) p->option_status = OFF;
+            
+        }
 
     }
 
@@ -2188,6 +2298,51 @@ void DrawMusicList(Rectangle& panel)
                     }
                 }
             }
+        }
+    }
+}
+
+void DeleteMusic(int& retFlag, size_t order)
+{
+    if (order >= 0 && order < data.size()) {
+        data.erase(data.begin() + order);
+
+        if (order == data.size()) {
+            order--;
+        }
+        if (Save()) TraceLog(LOG_INFO, "[SUCCESS] Delete Music");
+
+        if (data.size() == 0) {
+            std::ofstream file(data_txt);
+            if (file.is_open()) {
+                file << "0";
+                file.close();
+                FileZeroDataCheck(data_txt);
+            }
+        }
+
+
+    }
+    if (data.size() == 0) {
+        p->page = PAGE_DRAG_DROP;
+        zero_data = true;
+        { retFlag = 2; return; };
+        //goto drag_drop_label;
+    }
+
+    if (music_play == order) {
+        if (data.size() > 0) {
+            // SAVE TO TXT AGAIN
+            DetachAudioStreamProcessor(music.stream, callback);
+            ResetVisualizerParameter();
+
+            music = LoadMusicStream(data.at(music_play).path.c_str());
+            time_domain_signal = ExtractMusicData(data.at(music_play).path);
+
+            p->reset_time = true;
+            //setting_on = OFF;
+
+            AttachAudioStreamProcessor(music.stream, callback);
         }
     }
 }
@@ -2289,11 +2444,10 @@ void DrawMainDisplay(Rectangle& panel_main)
             //float freq = std::powf(10, log_f_min + i * delta_log);
 
             if (freq >= Freq_Bin.at(j) && freq <= Freq_Bin.at(j + 1)) {
-                float val = normalization(amplitude, min_amp, max_amp);
-                Spectrum.at(j) = std::max(Spectrum.at(j), val);
+                Spectrum.at(j) = std::max(Spectrum.at(j), amplitude);
 
                 if (amplitude > Peak.at(j).amplitude) {
-                    Peak.at(j).amplitude = val;
+                    Peak.at(j).amplitude = amplitude;
                     Peak.at(j).frequency_index = i;
                 }
 
@@ -2344,11 +2498,11 @@ void DrawMainDisplay(Rectangle& panel_main)
             break;
         }
 
-        Vector2 coor = { normalization(i, 0, BUCKETS - 1), (1 - final_amplitude) };
+        Vector2 coor = { normalization(float(i), 0.0F, (BUCKETS - 1)), (1 - final_amplitude * 0.7F) };
         pointsArray_Norm_smart[i] = coor;
 
-        //float bar_h = final_amplitude * panel_display.height * 0.65F;
-        float bar_h = final_amplitude * panel_display.height * 0.9F;
+        float bar_h = final_amplitude * panel_display.height * 0.7F;
+        //float bar_h = final_amplitude * panel_display.height * 0.9F;
         float bar_w = panel_display.width / BUCKETS;
 
         pad = bar_w * sqrtf(1 - final_amplitude) * 0.35F;
@@ -2377,7 +2531,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         Vector2 startPos = { bar.x + bar.width / 2, (bar.y + bar.height) - bar_h };
         Vector2 endPos = { bar.x + bar.width / 2, (bar.y + bar.height) };
         float thick = 4.0F * sqrt(final_amplitude) * (bar_w * 0.10F);
-        DrawLineEx(startPos, endPos, thick, color);
+        //DrawLineEx(startPos, endPos, thick, color);
 
         Vector2 center_bins = { bar.x + bar.width / 2, bar.y };
         float radius = bar_w * sqrt(final_amplitude) * 1.25F * 2;
@@ -2505,7 +2659,7 @@ void DrawMainDisplay(Rectangle& panel_main)
     // Make Rectangle
     Rectangle base{ panel_display };
     int JUMLAH_RECT = 100;
-    float coef_rect = 0.955;
+    float coef_rect = 0.955F;
     std::deque<Rectangle> landscape_rects{};
 
     for (int i = 0; i < JUMLAH_RECT; i++) {
@@ -2575,31 +2729,139 @@ void DrawMainDisplay(Rectangle& panel_main)
     DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 5.0F, Fade(color, 0.25F));
     DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 2.5F, Fade(WHITE, 1.0F));
 
+
+    // DRAW MUSIC MODE
+    DrawMusicPlayMode(panel_main, dt);
+
+    // DRAW FULLSCREEN BUTTON
+    DrawFullscreenButton(panel_main, dt);
+
 }
 
-void DrawMusicMode(Rectangle& panel_media, Rectangle& panel_main)
+void DrawFullscreenButton(Rectangle& panel_main, float dt)
 {
-    // MODE PANEL
-    {
-        float button_w = panel_media.height;
-        Rectangle mode_base_panel{
-            panel_main.x + panel_main.width - button_w,
-            panel_main.y + panel_main.height - button_w,
-            button_w,
-            button_w
-        };
-        //DrawRectangleRec(mode_base_panel, PANEL_COLOR);
-        float pad = 10.0F;
-        Rectangle mode_rect_icon{
-            mode_base_panel.x + (pad * 1),
-            mode_base_panel.y + (pad * 1),
-            button_w - (pad * 2),
-            button_w - (pad * 2),
-        };
-        //DrawRectangleRec(mode_rect_icon, RED);
+    float fullscreen_hover_size = panel_main.height / 4;
+    Rectangle fullscreen_btn_area_hover{
+        panel_main.x + panel_main.width - (fullscreen_hover_size + 10), // add 10 to make space to border, to minimize mouse_stuck.
+        panel_main.y + panel_main.height - fullscreen_hover_size,
+        fullscreen_hover_size,
+        fullscreen_hover_size
+    };
+    static float alpha_coef{};
 
-        Color icon_color = GRAY;
-        if (CheckCollisionPointRec(mouse_position, mode_rect_icon)) {
+    if (CheckCollisionPointRec(mouse_position, fullscreen_btn_area_hover)) {
+        if (alpha_coef <= 1.0F) {
+            //alpha_coef += dt * 0.5F;
+            alpha_coef += sqrtf(dt);
+        }
+    }
+    else {
+        if (alpha_coef >= 0.0F) {
+            //alpha_coef -= dt * 0.5F;
+            alpha_coef -= sqrtf(dt) / 4;
+        }
+    }
+
+    bool draw_icon = alpha_coef > 0.0F;
+
+    if (draw_icon) {
+        float fullscreen_btn_size = 50.0F;
+        float space = 5.0F;
+        Rectangle fullscreen_panel{
+            panel_main.x + panel_main.width - (fullscreen_btn_size + space),
+            panel_main.y + panel_main.height - (fullscreen_btn_size + space - PANEL_LINE_THICK),
+            fullscreen_btn_size,
+            fullscreen_btn_size
+        };
+        float pad = 5.0F;
+        Rectangle fullscreen_btn{
+            fullscreen_panel.x + (pad * 1),
+            fullscreen_panel.y + (pad * 1),
+            fullscreen_panel.width - (pad * 2),
+            fullscreen_panel.height - (pad * 2),
+        };
+        DrawRectangleRounded(fullscreen_btn, 0.25F, 10, Fade(LIGHTGRAY, 0.20F * alpha_coef));
+
+        Color icon_color{};
+        if (p->fullscreen == false) {
+            if (CheckCollisionPointRec(mouse_position, fullscreen_btn)) {
+                p->icon_fullscreen_index = 1;
+                icon_color = WHITE;
+                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                    p->fullscreen = true;
+                }
+            }
+            else {
+                p->icon_fullscreen_index = 0;
+                icon_color = LIGHTGRAY;
+            }
+        }
+        else {
+            if (CheckCollisionPointRec(mouse_position, fullscreen_btn)) {
+                p->icon_fullscreen_index = 3;
+                icon_color = WHITE;
+                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                    p->fullscreen = false;
+                }
+            }
+            else {
+                p->icon_fullscreen_index = 2;
+                icon_color = LIGHTGRAY;
+            }
+        }
+
+        float icon_size = 100.0F;
+        Rectangle dest{ fullscreen_btn };
+        Rectangle source{ p->icon_fullscreen_index * icon_size, 0, icon_size, icon_size };
+        DrawTexturePro(FULLSCREEN_TEX, source, dest, { 0,0 }, 0, Fade(icon_color, 1.0F * alpha_coef));
+    }
+}
+
+void DrawMusicPlayMode(Rectangle& panel_main, float dt)
+{
+
+    float play_mode_hover_size = panel_main.height / 4;
+    Rectangle play_mode_btn_area_hover{
+        panel_main.x,
+        panel_main.y + panel_main.height - play_mode_hover_size,
+        play_mode_hover_size,
+        play_mode_hover_size
+    };
+    static float alpha_coef{};
+
+    if (CheckCollisionPointRec(mouse_position, play_mode_btn_area_hover)) {
+        if (alpha_coef <= 1.0F) {
+            alpha_coef += sqrtf(dt);
+        }
+    }
+    else {
+        if (alpha_coef >= 0.0F) {
+            alpha_coef -= sqrtf(dt) / 4;
+        }
+    }
+
+    bool draw_icon = alpha_coef > 0.0F;
+
+    if (draw_icon) {
+        float play_mode_btn_size = 50.0F;
+        float space = 5.0F;
+        Rectangle play_mode_panel{
+            panel_main.x + space - PANEL_LINE_THICK,
+            panel_main.y + panel_main.height - (play_mode_btn_size + space - PANEL_LINE_THICK),
+            play_mode_btn_size,
+            play_mode_btn_size
+        };
+        float pad = 5.0F;
+        Rectangle play_mode_btn{
+            play_mode_panel.x + (pad * 1),
+            play_mode_panel.y + (pad * 1),
+            play_mode_panel.width - (pad * 2),
+            play_mode_panel.height - (pad * 2),
+        };
+        DrawRectangleRounded(play_mode_btn, 0.25F, 10, Fade(LIGHTGRAY, 0.20F * alpha_coef));
+
+        Color icon_color = LIGHTGRAY;
+        if (CheckCollisionPointRec(mouse_position, play_mode_btn)) {
             icon_color = RAYWHITE;
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                 p->repeat = !p->repeat;
@@ -2608,9 +2870,9 @@ void DrawMusicMode(Rectangle& panel_media, Rectangle& panel_main)
 
         if (is_Draw_Icons()) {
             float icon_size = 100.0F;
-            Rectangle dest = mode_rect_icon;
+            Rectangle dest = play_mode_btn;
             Rectangle source = { p->repeat * icon_size, 0, icon_size, icon_size };
-            DrawTexturePro(MODE_TEX, source, dest, { 0,0 }, 0, icon_color);
+            DrawTexturePro(MODE_TEX, source, dest, { 0,0 }, 0, Fade(icon_color, 1.0F * alpha_coef));
         }
     }
 }
