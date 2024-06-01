@@ -180,6 +180,11 @@ VisualMode visualM2{ "Galaxy", "V + 2", ON };
 VisualMode visualM3{ "Landscape", "V + 3", ON };
 VisualMode visualM4{ "Spectogram", "V + 4", OFF };
 
+struct Notification {
+    std::string g_info{};
+    float g_info_timer{};
+};
+
 struct Plug {
     int page{};
     int play{};
@@ -206,6 +211,7 @@ struct Plug {
     bool visual_mode_expand{ OFF };
     std::vector<VisualMode> visualmode{visualM1, visualM2, visualM3, visualM4};
     size_t visual_mode_active{ 2 };
+    Notification notification{};
 };
 
 Plug tirakat{};
@@ -474,8 +480,7 @@ static std::vector<float> ExtractMusicData(std::string& filename) {
     // Jika input berupa file wav, perlu penguatan pada amplitude, sekitar 3 - 6 kali lipat.
 }
 
-
-void tooltip(const Rectangle &boundary, const Font &font, const ScreenSize &screen, const std::string &information) {
+void Tooltip(const Rectangle &boundary, const Font &font, const ScreenSize &screen, const std::string &information) {
     float rect_h{ 35.0F };
     float rect_w{};
     float font_size = rect_h * 0.8F;
@@ -492,7 +497,7 @@ void tooltip(const Rectangle &boundary, const Font &font, const ScreenSize &scre
         rect_h 
     };
 
-    tip_panel.x = center - (rect_w / 2);
+    tip_panel.x = center - (tip_panel.width / 2);
     
     if (tip_panel.x < space) tip_panel.x = space;
     else if (tip_panel.x + tip_panel.width > screen.w) {
@@ -511,6 +516,39 @@ void tooltip(const Rectangle &boundary, const Font &font, const ScreenSize &scre
 
 }
 
+void NotificationTool(const Rectangle& base_boundary, const Font& font, const std::string& info, float& info_timer, float dt) {
+    float rect_h{ 40.0F };
+    float rect_w{};
+    float font_size{ rect_h * 0.8F };
+    float font_space{ 0.5F };
+    float space{ 10 };
+    Vector2 text_measure = MeasureTextEx(font, info.c_str(), font_size, font_space);
+    float center = base_boundary.x + base_boundary.width / 2;
+    rect_w = text_measure.x + (space * 3.F);
+
+    Rectangle notification_panel{
+        0,
+        base_boundary.y + 100,
+        rect_w,
+        rect_h
+    };
+
+    notification_panel.x = center - (notification_panel.width / 2);
+    Vector2 text_coor{
+        notification_panel.x + (notification_panel.width - text_measure.x) / 2,
+        notification_panel.y + (notification_panel.height - text_measure.y) / 2,
+    };
+    Color color = { 50, 50, 50, 255 };
+
+    if (info_timer > 0) {
+        float alpha = 1.0F;
+        if (info_timer < 1) alpha = (info_timer * info_timer);
+        DrawRectangleRounded(notification_panel, 0.25F, 10, Fade(color, alpha * 0.9F));
+        DrawTextEx(font, info.c_str(), text_coor, font_size, font_space, Fade(RAYWHITE, alpha));
+    }
+
+    info_timer -= dt;
+}
 
 Vector2 mouse_position{};
 std::vector<Data> data{};
@@ -568,7 +606,7 @@ std::deque<std::vector<Vector2>> landscape_splines{};
 
 ScreenSize screen{};
 
-
+float volume{};
 
 int main()
 {
@@ -578,11 +616,11 @@ int main()
     std::cout << "Hello World!\n";
     std::cout << "RAYLIB VERSION: " << RAYLIB_VERSION << std::endl;
 
-    screen = { 1000, 580 };
+    screen = { 1200, 700 };
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_ALWAYS_RUN);
     SetConfigFlags(FLAG_MSAA_4X_HINT);
-    //SetConfigFlags(FLAG_WINDOW_UNDECORATED);
+    SetConfigFlags(FLAG_WINDOW_UNDECORATED);
 
     InitWindow((int)screen.w, (int)screen.h, "Tirakat");
     InitAudioDevice();
@@ -766,6 +804,8 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
 {
     retFlag = 1;
 
+    volume = GetMasterVolume();
+
     if (p->mouse_cursor == MOUSE_CURSOR_POINTING_HAND) {
         SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
     }
@@ -800,10 +840,14 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         else {
             float music_move_to = (static_cast<float>(music_time) / 1000) - 5.0F;
             SeekMusicStream(music, music_move_to);
-            std::cout << "LEFT ARROW : -5 SECONDS" << std::endl;
+            //std::cout << "LEFT ARROW : -5 SECONDS" << std::endl;
             interval_time = INTERVAL;
+
+            std::string info = "-5 seconds";
+            p->notification.g_info = info;
+            p->notification.g_info_timer = HUD_TIMER_SECS;
         }
-        
+
     }
     else if (IsKeyDown(KEY_RIGHT)) {
 
@@ -813,19 +857,27 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         else {
             float music_move_to = (static_cast<float>(music_time) / 1000) + 5.0F;
             SeekMusicStream(music, music_move_to);
-            std::cout << "RIGHT ARROW : +5 SECONDS" << std::endl;
+            //std::cout << "RIGHT ARROW : +5 SECONDS" << std::endl;
             interval_time = INTERVAL;
+
+            std::string info{ "+5 seconds" };
+            p->notification.g_info = info;
+            p->notification.g_info_timer = HUD_TIMER_SECS;
         }
     }
-    else if (IsKeyPressed(KEY_LEFT)) {
-        float music_move_to = (static_cast<float>(music_time) / 1000) - 5.0F;
-        SeekMusicStream(music, music_move_to);
-        std::cout << "LEFT ARROW : -5 SECONDS" << std::endl;
+    else if (IsKeyPressed(KEY_UP)) {
+        SetMasterVolume(volume + 0.05F);
+
+        std::string info{ std::to_string(static_cast<int>(GetMasterVolume() * 100)) + "%" };
+        p->notification.g_info = info;
+        p->notification.g_info_timer = HUD_TIMER_SECS;
     }
-    else if (IsKeyPressed(KEY_RIGHT)) {
-        float music_move_to = (static_cast<float>(music_time) / 1000) + 5.0F;
-        SeekMusicStream(music, music_move_to);
-        std::cout << "RIGHT ARROW : +5 SECONDS" << std::endl;
+    else if (IsKeyPressed(KEY_DOWN)) {
+        SetMasterVolume(volume - 0.05F);
+
+        std::string info{ std::to_string(static_cast<int>(GetMasterVolume() * 100)) + "%" };
+        p->notification.g_info = info;
+        p->notification.g_info_timer = HUD_TIMER_SECS;
     }
     else {
         interval_time = 0;
@@ -1100,18 +1152,22 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         }
 
 
-        // SPECIAL CASE
+        // SPECIAL CASE TOOLTIP
         if (special_btn_setting.enable == ON && CheckCollisionPointRec(mouse_position, special_btn_setting.rect)) {
             std::string info{ "Reset Counter" };
-            tooltip(special_btn_setting.rect, font_visual_mode_child, screen, info);
+            Tooltip(special_btn_setting.rect, font_visual_mode_child, screen, info);
         } 
 
         if (special_btn_delete.enable == ON && CheckCollisionPointRec(mouse_position, special_btn_delete.rect)) {
             std::string info{ "Delete Music" };
-            tooltip(special_btn_delete.rect, font_visual_mode_child, screen, info);
+            Tooltip(special_btn_delete.rect, font_visual_mode_child, screen, info);
         }
         
     }
+
+
+
+
 
 
 }
@@ -1476,7 +1532,7 @@ void DrawProgressTimeDomain(Rectangle& panel, float progress_w)
             alpha = 0.8F;
         }
     
-        DrawLineEx({ x1,y1 }, { x2,y2 }, 1.75F, Fade(color, alpha));
+        DrawLineEx({ x1,y1 }, { x2,y2 }, 1.5F, Fade(color, alpha));
     }
 
     if (CheckCollisionPointRec(mouse_position, panel)) p->mouse_cursor = MOUSE_CURSOR_POINTING_HAND;
@@ -1509,9 +1565,8 @@ void DrawMedia(Rectangle& panel_media)
 
 void DrawVolume(Rectangle& panel_playpause, float button_panel)
 {
-    float volume{ GetMasterVolume() };
+    volume = { GetMasterVolume() };
     bool volume_btn_clicked{ false };
-
     //static bool HUD_toggle = false;
     static bool HUD_toggle = true;
 
@@ -1547,7 +1602,7 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
         std::string info{};
         if (volume > 0) info = "Mute [M]";
         else info = "Unmute [M]";
-        tooltip(panel_volume, font_visual_mode_child, screen, info);
+        Tooltip(panel_volume, font_visual_mode_child, screen, info);
 
         if (CheckCollisionPointRec(mouse_position, panel_volume) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             volume_btn_clicked = true;
@@ -1565,7 +1620,6 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
         }
         SetMasterVolume(volume);
     }
-
 
     static size_t icon_index = 0;
     if (p->volume_mute) {
@@ -1644,7 +1698,7 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
         if (inSlider) {
 
             std::string info{ "Volume " + std::to_string(static_cast<int>(volume * 100)) + "%"};
-            tooltip(volume_slider_panel, font_visual_mode_child, screen, info);
+            Tooltip(volume_slider_panel, font_visual_mode_child, screen, info);
 
             if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 vol_length = mouse_position.x - volume_slider.x;
@@ -1690,26 +1744,27 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
         // MASIH NGEBUG - PERLU PENYELIDIKAN LEBIH LANJUT - Mungkin perlu di taruh di mainPage function bukan disini
         //if (inSlider) p->mouse_cursor = MOUSE_CURSOR_POINTING_HAND;
         //else p->mouse_cursor = MOUSE_CURSOR_DEFAULT;
-        
+
 
     }
+
 
     // Mungkin perlu di hapus, tidak diperlukan lagi di versi ini
     // OUTSIDE OF HUD
-    bool outVolumeBase = !(CheckCollisionPointRec(mouse_position, panel_volume_base));
-    if (outVolumeBase) {
-        //HUD_toggle = false;
-    }
+    //bool outVolumeBase = !(CheckCollisionPointRec(mouse_position, panel_volume_base));
+    //if (outVolumeBase) {
+    //    //HUD_toggle = false;
+    //}
 
-    if (p->dragging == DRAG_VOLUME) {
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && outVolumeBase) {
-            HUD_toggle = true;
-        }
-        else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && outVolumeBase) {
-            HUD_toggle = false;
-            p->dragging = DRAG_RELEASE;
-        }
-    }
+    //if (p->dragging == DRAG_VOLUME) {
+    //    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && outVolumeBase) {
+    //        HUD_toggle = true;
+    //    }
+    //    else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && outVolumeBase) {
+    //        HUD_toggle = false;
+    //        p->dragging = DRAG_RELEASE;
+    //    }
+    //}
 }
 
 void DrawMusicList(Rectangle& panel, int& retFlag)
@@ -1995,10 +2050,13 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
 
         DrawRectangleRounded(content, 0.2F, 10, color_content);
 
-        font = &font_s_semibold;
+        //font = &font_s_semibold;
+        font = &font_visual_mode_child;
         float text_width_limit = content.width - 30.0F;
-        float font_size = content_h * 0.475F;
+        //float font_size = content_h * 0.475F;
+        float font_size = content_h * 0.5F;
         float font_space = -0.25F;
+        //float font_space = 0.0F;
         float text_width = 0.0F;
         int max_chars = 0;
 
@@ -2681,6 +2739,9 @@ void DrawMainDisplay(Rectangle& panel_main)
     // DRAW VISUAL MODE BUTTON
     DrawVisualModeButton(panel_main, dt);
 
+    // DRAW NOTIFICATION
+    NotificationTool(panel_main, font_visual_mode_child, p->notification.g_info, p->notification.g_info_timer, dt);
+
 
 }
 
@@ -2947,7 +3008,7 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
                 icon_color = WHITE;
 
                 std::string info = "Expand [F]";
-                tooltip(fullscreen_btn, font_visual_mode_child, screen, info);
+                Tooltip(fullscreen_btn, font_visual_mode_child, screen, info);
 
                 if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && (time_down <= 0.0F)) {
                     p->fullscreen = ON;
@@ -2966,7 +3027,7 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
                 icon_color = WHITE;
 
                 std::string info = "Collapse [F]";
-                tooltip(fullscreen_btn, font_visual_mode_child, screen, info);
+                Tooltip(fullscreen_btn, font_visual_mode_child, screen, info);
 
                 if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && (time_down <= 0.0F)) {
                     p->fullscreen = OFF;
@@ -3062,7 +3123,7 @@ void DrawMusicPlayModeButton(Rectangle& panel_main, float dt)
             std::string info{};
             if (p->repeat == ON) info = "Repeat";
             else info = "Loop";
-            tooltip(play_mode_btn, font_visual_mode_child, screen, info);
+            Tooltip(play_mode_btn, font_visual_mode_child, screen, info);
 
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                 p->repeat = !p->repeat;
@@ -3249,7 +3310,7 @@ void DrawPlayPause(const Rectangle& play_rect, const Rectangle& hover_panel)
         std::string info{};
         if (p->music_playing == ON) info = "Pause [Space]";
         else info = "Play [Space]";
-        tooltip(hover_panel, font_visual_mode_child, screen, info);
+        Tooltip(hover_panel, font_visual_mode_child, screen, info);
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             p->music_playing = !p->music_playing;
