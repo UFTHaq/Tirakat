@@ -43,8 +43,10 @@
 // 8. Dear ImGui Best tutorial to use in Visual Studio 2022: 
 //    Part 1: https://www.youtube.com/watch?v=SP6Djf6ku1E
 //    Part 2: https://www.youtube.com/watch?v=HivfFkhpLjE
+// 
+// 9. Add Label on button if hover functionality
 //
-// 9. Maybe consider to use JUCE? maybe not, maybe in the next project, maybe for MusMiBot?
+// 10. Maybe consider to use JUCE? maybe not, maybe in the next project, maybe for MusMiBot?
 
 // SMALL THINGS TODO:
 // 1. FFT RESPON BUAT LEBIH BAIK:
@@ -73,7 +75,6 @@
 #include <cassert>
 #include <algorithm>
 #include <iomanip>
-//#include <cmath>
 
 #include <chrono>
 #include <thread>
@@ -88,6 +89,9 @@
 #define FONT_LOC_Source_Sans_BOLD {"resources/Fonts/Source_Sans_3/static/SourceSans3-Bold.ttf"}
 #define FONT_LOC_Source_Sans_SEMIBOLD {"resources/Fonts/Source_Sans_3/static/SourceSans3-SemiBold.ttf"}
 #define FONT_LOC_Source_Sans_REG {"resources/Fonts/Source_Sans_3/static/SourceSans3-Regular.ttf"}
+#define FONT_LOC_Sofia_Sans_Condensed_BOLD {"resources/Fonts/Sofia_Sans_Condensed/static/SofiaSansCondensed-Bold.ttf"}
+//#define FONT_LOC_Sofia_Sans_Condensed_REG {"resources/Fonts/Sofia_Sans_Condensed/static/SofiaSansCondensed-Regular.ttf"}
+#define FONT_LOC_Sofia_Sans_Condensed_REG {"resources/Fonts/Sofia_Sans_Condensed/static/SofiaSansCondensed-Medium.ttf"}
 
 #define ICON_APP_LOC        {"resources/Icons/Tirakat-V4.png"}
 #define ICON_PLAYPAUSE_LOC  {"resources/Icons/PlayPause.png"}
@@ -97,7 +101,7 @@
 #define ICON_X_LOC          {"resources/Icons/X.png"}
 #define ICON_DELETE_LOC     {"resources/Icons/Trash.png"}
 #define ICON_MODE_LOC       {"resources/Icons/Mode.png"}
-//#define ICON_MODE_LOC       {"resources/Icons/Mode.png"}
+#define ICON_POINTER_LOC    {"resources/Icons/Pointer.png"}
 
 #define HUD_TIMER_SECS 1.5F
 #define PANEL_LEFT_WIDTH 275.0F
@@ -116,7 +120,7 @@
 #define PANEL_COLOR2                Color{  30,  30,  30, 255 }
 #define PANEL_LINE_COLOR            Color{  20,  20,  20, 255 }
 #define PANEL_PROGRESS_BASE_COLOR   Color{  25,  25,  25, 255 }
-#define PANEL_PROGRESS_COLOR        LIGHTGRAY
+#define PANEL_PROGRESS_COLOR        DARKGRAY
 
 #define CONTENT_COLOR               Color{  60,  60,  60, 255 }
 #define CONTENT_CHOOSE_COLOR        Color{ 150, 150, 150, 255 }
@@ -128,6 +132,11 @@
 #define POPUP_APPLY_COLOR           Color{ 75,  109, 214, 255 }
 #define POPUP_CANCEL_COLOR          Color{ 142, 149, 178, 255 }
 #define TARGET_DONE_COLOR           Color{  80, 180, 120, 255 }
+
+#define KEY_TOGGLE_PLAY KEY_SPACE
+#define KEY_TOGGLE_MUTE KEY_M
+#define KEY_FULLSCREEN  KEY_F
+#define KEY_VISUAL_MODE KEY_V 
 
 enum Page {
     PAGE_DRAG_DROP,
@@ -153,6 +162,24 @@ enum MODE {
     MODE_MAX_PEAK
 };
 
+enum VisualModes {
+    CLASSIC,
+    GALAXY,
+    LANDSCAPE,
+    SPECTOGRAM
+};
+
+struct VisualMode {
+    std::string title{};
+    std::string shortcut{};
+    bool enable{};
+};
+
+VisualMode visualM1{ "Classic", "V + 1", ON };
+VisualMode visualM2{ "Galaxy", "V + 2", ON };
+VisualMode visualM3{ "Landscape", "V + 3", ON };
+VisualMode visualM4{ "Spectogram", "V + 4", OFF };
+
 struct Plug {
     int page{};
     int play{};
@@ -164,6 +191,8 @@ struct Plug {
     float last_volume{};
     size_t icon_fullscreen_index{};
     bool fullscreen{ false };
+    bool popup_on = false;
+    std::string popup_title{};
     bool mouse_onscreen{ true };
     bool repeat{ OFF };
     int mouse_cursor{};
@@ -172,10 +201,11 @@ struct Plug {
     bool moving_save{ false };
     Shader circle{};
     Shader bubble{};
-    int option_status = OFF;
+    int option_status{ OFF };
     size_t option_music_order{};
-    bool popup_on = false;
-    std::string popup_title{};
+    bool visual_mode_expand{ OFF };
+    std::vector<VisualMode> visualmode{visualM1, visualM2, visualM3, visualM4};
+    size_t visual_mode_active{ 2 };
 };
 
 Plug tirakat{};
@@ -194,6 +224,15 @@ struct ScreenSize {
     float h{};
 };
 
+// Special cause mistake i made
+struct SpecialToolTip {
+    bool enable{};
+    Rectangle rect{};
+};
+
+SpecialToolTip special_btn_delete{};
+SpecialToolTip special_btn_setting{};
+
 struct Frame {
     float left{};
     float right{};
@@ -203,14 +242,16 @@ const int N{ 1 << 10 };
 fftw_complex* in = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
 fftw_complex* out = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
 
-const int BUCKETS{ 1 << 6 };
+//const int BUCKETS{ 1 << 6 };
+const int BUCKETS{ 80 };
 std::array<float, BUCKETS> Spectrum{};
 std::array<float, BUCKETS + 1> Freq_Bin{};
 
-const int SMOOTHING_BUFFER_SIZE{ 12 };
+const int SMOOTHING_BUFFER_SIZE{ 15 };
 std::array<std::array<float, SMOOTHING_BUFFER_SIZE>, BUCKETS> prevAmplitude{};
 std::array<float, BUCKETS> smoothedAmplitude{};
-std::array<bool, BUCKETS> stronger{};
+std::array<float, BUCKETS> out_smear{};
+//std::array<bool, BUCKETS> stronger{};
 float maxAmplitude = 0.0F;
 
 struct PeakInfo {
@@ -369,9 +410,11 @@ void ResetVisualizerParameter();
 
 void DrawMainDisplay(Rectangle& panel_main);
 
+void DrawVisualModeButton(Rectangle& panel_main, float dt);
+
 void DrawFullscreenButton(Rectangle& panel_main, float dt);
 
-void DrawMusicPlayMode(Rectangle& panel_main, float dt);
+void DrawMusicPlayModeButton(Rectangle& panel_main, float dt);
 
 void DrawMusicProgress(Rectangle& panel_progress, float& music_volume);
 
@@ -432,6 +475,43 @@ static std::vector<float> ExtractMusicData(std::string& filename) {
 }
 
 
+void tooltip(const Rectangle &boundary, const Font &font, const ScreenSize &screen, const std::string &information) {
+    float rect_h{ 35.0F };
+    float rect_w{};
+    float font_size = rect_h * 0.8F;
+    float font_space = 0.5F;
+    float space = 10;
+    Vector2 text_measure = MeasureTextEx(font, information.c_str(), font_size, font_space);
+    rect_w = text_measure.x + (space * 3.F);
+    float center = boundary.x + boundary.width / 2;
+
+    Rectangle tip_panel{ 
+        0, 
+        boundary.y - space - rect_h, 
+        rect_w, 
+        rect_h 
+    };
+
+    tip_panel.x = center - (rect_w / 2);
+    
+    if (tip_panel.x < space) tip_panel.x = space;
+    else if (tip_panel.x + tip_panel.width > screen.w) {
+        tip_panel.x = screen.w - (tip_panel.width + space);
+    }
+    else if (tip_panel.y < space) tip_panel.y = boundary.y + boundary.height + space;
+
+    Vector2 text_coor{
+        tip_panel.x + (tip_panel.width - text_measure.x) / 2,
+        tip_panel.y + (tip_panel.height - text_measure.y) / 2,
+    };
+
+    Color color = { 20, 20, 20, 240 };
+    DrawRectangleRounded(tip_panel, 0.25F, 10, color);
+    DrawTextEx(font, information.c_str(), text_coor, font_size, font_space, RAYWHITE);
+
+}
+
+
 Vector2 mouse_position{};
 std::vector<Data> data{};
 size_t data_size{};
@@ -447,14 +527,17 @@ Font font_s_semibold{};
 Font font_s_reg{};
 Font font_number{};
 Font font_counter{};
+Font font_visual_mode{};
+Font font_visual_mode_child{};
 
 Texture2D PLAYPAUSE_TEX{};
 Texture2D FULLSCREEN_TEX{};
 Texture2D VOLUME_TEX{};
 Texture2D SETTING_TEX{};
-Texture2D MODE_TEX{};
-Texture2D X_TEX{};
 Texture2D DELETE_TEX{};
+Texture2D X_TEX{};
+Texture2D MODE_TEX{};
+Texture2D POINTER_TEX{};
 
 std::ostringstream formatted_duration{};
 std::ostringstream formatted_progress{};
@@ -483,6 +566,10 @@ int content_preview{};
 
 std::deque<std::vector<Vector2>> landscape_splines{};
 
+ScreenSize screen{};
+
+
+
 int main()
 {
     //landscape_splines.reserve(BUCKETS * 60);
@@ -491,15 +578,18 @@ int main()
     std::cout << "Hello World!\n";
     std::cout << "RAYLIB VERSION: " << RAYLIB_VERSION << std::endl;
 
-    ScreenSize screen{ 1000, 580 };
+    screen = { 1000, 580 };
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_ALWAYS_RUN);
     SetConfigFlags(FLAG_MSAA_4X_HINT);
+    //SetConfigFlags(FLAG_WINDOW_UNDECORATED);
 
     InitWindow((int)screen.w, (int)screen.h, "Tirakat");
     InitAudioDevice();
     SetTargetFPS(75);
     SetWindowIcon(LoadImage(ICON_APP_LOC));
+    //ToggleBorderlessWindowed();
+    //SetWindowOpacity(0.75F);
 
     font_m = LoadFontEx(FONT_LOC_Roboto_Slab, 90, 0, 0);
     SetTextureFilter(font_m.texture, TEXTURE_FILTER_BILINEAR);
@@ -518,6 +608,13 @@ int main()
 
     font_counter = LoadFontEx(FONT_LOC_Roboto_Mono, 50, 0, 0);
     SetTextureFilter(font_counter.texture, TEXTURE_FILTER_BILINEAR);
+
+    font_visual_mode = LoadFontEx(FONT_LOC_Sofia_Sans_Condensed_BOLD, 60, 0, 0);
+    SetTextureFilter(font_visual_mode.texture, RL_TEXTURE_FILTER_BILINEAR);
+
+    font_visual_mode_child = LoadFontEx(FONT_LOC_Sofia_Sans_Condensed_REG, 60, 0, 0);
+    SetTextureFilter(font_visual_mode_child.texture, RL_TEXTURE_FILTER_BILINEAR);
+
 
     Image play_pause_icon = LoadImage(ICON_PLAYPAUSE_LOC);
     PLAYPAUSE_TEX = LoadTextureFromImage(play_pause_icon);
@@ -546,6 +643,11 @@ int main()
     Image delete_icon = LoadImage(ICON_DELETE_LOC);
     DELETE_TEX = LoadTextureFromImage(delete_icon);
     SetTextureFilter(DELETE_TEX, TEXTURE_FILTER_BILINEAR);
+
+    Image pointer_icon = LoadImage(ICON_POINTER_LOC);
+    POINTER_TEX = LoadTextureFromImage(pointer_icon);
+    SetTextureFilter(POINTER_TEX, TEXTURE_FILTER_BILINEAR);
+
 
     p->circle = LoadShader(NULL, "resources/shaders/circle.fs");
     p->bubble = LoadShader(NULL, "resources/shaders/bubble.fs");
@@ -616,7 +718,8 @@ int main()
             break;
         }
 
-        DrawFPS(screen.w - 83, 10);
+        //DrawFPS(screen.w - 83, 10);
+        DrawFPS(screen.w / 2 - 38, 10);
 
         EndDrawing();
     }
@@ -976,11 +1079,11 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
 
         //// BLOCK DRAWING
         
-        // DRAWING PANEL MAIN
-        DrawMainDisplay(panel_main);
-
         // DRAWING PANEL MUSIC LIST
         DrawMusicList(panel_music_list, retFlag);
+
+        // DRAWING PANEL MAIN
+        DrawMainDisplay(panel_main);
 
         // DRAWING PANEL DURATION
         DrawDuration(panel_duration);
@@ -997,6 +1100,17 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         }
 
 
+        // SPECIAL CASE
+        if (special_btn_setting.enable == ON && CheckCollisionPointRec(mouse_position, special_btn_setting.rect)) {
+            std::string info{ "Reset Counter" };
+            tooltip(special_btn_setting.rect, font_visual_mode_child, screen, info);
+        } 
+
+        if (special_btn_delete.enable == ON && CheckCollisionPointRec(mouse_position, special_btn_delete.rect)) {
+            std::string info{ "Delete Music" };
+            tooltip(special_btn_delete.rect, font_visual_mode_child, screen, info);
+        }
+        
     }
 
 
@@ -1395,10 +1509,13 @@ void DrawMedia(Rectangle& panel_media)
 
 void DrawVolume(Rectangle& panel_playpause, float button_panel)
 {
+    float volume{ GetMasterVolume() };
+    bool volume_btn_clicked{ false };
+
     //static bool HUD_toggle = false;
     static bool HUD_toggle = true;
 
-    float volume_slider_length_base = 150.0F;
+    float volume_slider_length_base = 170.0F;
     Rectangle panel_volume_base{
         panel_playpause.x + panel_playpause.width,
         panel_playpause.y,
@@ -1422,22 +1539,33 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
         panel_volume.height - (pad * 2),
     };
 
-    float volume = GetMasterVolume();
     Color icon_color = GRAY;
     if (CheckCollisionPointRec(mouse_position, panel_volume)) {
         icon_color = RAYWHITE;
         HUD_toggle = true;
+
+        std::string info{};
+        if (volume > 0) info = "Mute [M]";
+        else info = "Unmute [M]";
+        tooltip(panel_volume, font_visual_mode_child, screen, info);
+
         if (CheckCollisionPointRec(mouse_position, panel_volume) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            if (volume > 0) {
-                p->last_volume = volume;
-                volume = 0;
-            }
-            else {
-                volume = p->last_volume;
-            }
-            SetMasterVolume(volume);
+            volume_btn_clicked = true;
         }
     }
+
+
+    if (IsKeyPressed(KEY_TOGGLE_MUTE) || volume_btn_clicked) {
+        if (volume > 0) {
+            p->last_volume = volume;
+            volume = 0;
+        }
+        else {
+            volume = p->last_volume;
+        }
+        SetMasterVolume(volume);
+    }
+
 
     static size_t icon_index = 0;
     if (p->volume_mute) {
@@ -1475,10 +1603,10 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
             volume_slider_length_base,
             panel_volume.height
         };
-        //DrawRectangleRec(volume_slider_panel, DARKBROWN);
+        //DrawRectangleRec(volume_slider_panel, RED);
 
         // SLIDER DRAW - START
-        float padding_slider = 20.0F;
+        float padding_slider = 50.0F;
         float volume_slider_w = volume_slider_length_base - padding_slider;
         float volume_slider_h = button_panel * 0.15F;
         float vol_ratio = static_cast<float>(volume_slider_w) / 1;
@@ -1514,6 +1642,9 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
         // DRAG
         bool inSlider = (CheckCollisionPointRec(mouse_position, volume_slider_panel));
         if (inSlider) {
+
+            std::string info{ "Volume " + std::to_string(static_cast<int>(volume * 100)) + "%"};
+            tooltip(volume_slider_panel, font_visual_mode_child, screen, info);
 
             if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 vol_length = mouse_position.x - volume_slider.x;
@@ -1972,16 +2103,22 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                         DeleteMusic(retFlag, p->option_music_order);
                         p->option_status = OFF;
 
-
                     }
                 }
+
+                special_btn_setting = { ON, setting_btn };
+                special_btn_delete = { ON, delete_btn };
             }
 
             if (time_down >= 0.0F) time_down -= dt;
             if (time_down <= 0.0F) if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) p->option_status = OFF;
             
+            
         }
-
+        else {
+            special_btn_setting = { OFF, {} };
+            special_btn_delete = { OFF, {} };
+        }
     }
 
     EndScissorMode();
@@ -2214,28 +2351,34 @@ void DrawMainDisplay(Rectangle& panel_main)
     std::unique_ptr<Vector2[]> pointsArray_RealTime_smart(new Vector2[BUCKETS]);
     std::unique_ptr<Vector2[]> pointsArray_Norm_smart(new Vector2[BUCKETS]);
 
-    // JUST FOR DRAWING
     for (int i = 0; i < BUCKETS; i++) {
         float final_amplitude = smoothedAmplitude.at(i);
 
         switch (p->mode)
         {
         case MODE_NATURAL:
-            final_amplitude = natural_scale(final_amplitude, 0.02F);
+            smoothedAmplitude.at(i) = natural_scale(final_amplitude, 0.02F);
             break;
         case MODE_EXPONENTIAL:
-            final_amplitude = exponential_scale(final_amplitude, 0.5F);
+            smoothedAmplitude.at(i) = exponential_scale(final_amplitude, 0.5F);
             break;
         case MODE_MULTI_PEAK:
-            final_amplitude = multi_peak_scale(final_amplitude, i, 1.0F, Peak);
+            smoothedAmplitude.at(i) = multi_peak_scale(final_amplitude, i, 1.0F, Peak);
             break;
         case MODE_MAX_PEAK:
-            final_amplitude = max_peak_scale(final_amplitude, maxAmplitude, 0.2F);
+            smoothedAmplitude.at(i) = max_peak_scale(final_amplitude, maxAmplitude, 0.2F);
             break;
         default:
             break;
         }
 
+        float smearness = 8;
+        out_smear.at(i) += (smoothedAmplitude.at(i) - out_smear.at(i)) * smearness * GetFrameTime();
+    }
+
+    // JUST FOR DRAWING
+    for (int i = 0; i < BUCKETS; i++) {
+        float final_amplitude = smoothedAmplitude.at(i);
         Vector2 coor = { normalization(float(i), 0.0F, (BUCKETS - 1)), (1 - final_amplitude * 0.7F) };
         pointsArray_Norm_smart[i] = coor;
 
@@ -2260,8 +2403,8 @@ void DrawMainDisplay(Rectangle& panel_main)
         };
 
         Color color{};
-        float hue = (float)i / BUCKETS;
-        float sat = 1.0F;
+        float hue = (float)i / BUCKETS * 0.9F;
+        float sat = 0.85F;
         float val = 1.0F;
         color = ColorFromHSV(hue * 360, sat, val);
 
@@ -2269,215 +2412,491 @@ void DrawMainDisplay(Rectangle& panel_main)
         Vector2 startPos = { bar.x + bar.width / 2, (bar.y + bar.height) - bar_h };
         Vector2 endPos = { bar.x + bar.width / 2, (bar.y + bar.height) };
         float thick = 4.0F * sqrt(final_amplitude) * (bar_w * 0.10F);
-        //DrawLineEx(startPos, endPos, thick, color);
+
 
         Vector2 center_bins = { bar.x + bar.width / 2, bar.y };
         float radius = bar_w * sqrt(final_amplitude) * 1.25F * 2;
-
         pointsArray_RealTime_smart[i] = center_bins;
 
-        // Maybe can used for toggle glow or bubble effect. not as default 
-        if (p->glow) {
-            // DRAW BUBBLE USING SHADERS
-            radius = bar_w * sqrt(final_amplitude) * 1.40F * 2;
-            BeginShaderMode(p->bubble);
-            Texture2D bubble_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
-            Vector2 bubble_pos = {
+        
+        if (p->visual_mode_active == CLASSIC) {
+            p->mode = MODE_MULTI_PEAK;
+
+            bar_h *= 1.25F;
+            startPos = { bar.x + bar.width / 2, (bar.y + bar.height) - bar_h };
+            endPos = { bar.x + bar.width / 2, (bar.y + bar.height) };
+            DrawLineEx(startPos, endPos, thick, color);
+
+            // Maybe can used for toggle glow or bubble effect. not as default 
+            if (p->glow) {
+                // DRAW BUBBLE USING SHADERS
+                radius = bar_w * sqrt(final_amplitude) * 1.40F * 2;
+                BeginShaderMode(p->bubble);
+                Texture2D bubble_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+                Vector2 bubble_pos = {
+                    startPos.x - radius,
+                    startPos.y - radius
+                };
+                float bubble_rotation = { 0 };
+                float bubble_scale = radius * 2;
+                DrawTextureEx(bubble_texture, bubble_pos, bubble_rotation, bubble_scale, Fade(RAYWHITE, 0.25F));
+                EndShaderMode();
+            }
+
+            {
+                // TRY SMEAR EFFECT
+                Texture2D smear_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+
+                BeginShaderMode(p->circle);
+                float start = out_smear.at(i) * panel_display.height * 0.65F;;
+                float end = bar_h;
+                //float end = endPos.y;
+                Vector2 start_pos = startPos;
+                Vector2 end_pos = endPos;
+                //Vector2 start_pos = endPos;
+                //Vector2 end_pos = startPos;
+                //Vector2 start_pos = { bar.x + bar.width / 2, panel_display.y + panel_display.height - start };
+                //Vector2 end_pos = { bar.x + bar.width / 2, panel_display.y + panel_display.height - end };
+
+                float radius = bar_w * sqrt(final_amplitude) * 2.F;
+                Vector2 origin{};
+                if (end_pos.y >= start_pos.y) {
+                    Rectangle dest{
+                        start_pos.x - radius / 2,
+                        start_pos.y,
+                        radius,
+                        end_pos.y - start_pos.y
+                    };
+                    Rectangle source{ 0, 0, 1, 0.5 };
+                    DrawTexturePro(smear_texture, source, dest, origin, 0, color);
+                }
+                else {
+                    Rectangle dest{
+                        end_pos.x - radius / 2,
+                        end_pos.y,
+                        radius,
+                        start_pos.y - end_pos.y
+                    };
+                    Rectangle source{ 0, 0.5, 1, 0.5 };
+                    DrawTexturePro(smear_texture, source, dest, origin, 0, color);
+                }
+
+                EndShaderMode();
+            }
+
+            // DRAW CIRCLE USING SHADERS
+            BeginShaderMode(p->circle);
+            Texture2D circle_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+            radius = bar_w * sqrt(final_amplitude) * 1.50F * 2;
+
+            // TOP CIRCLE
+            Vector2 top_pos = {
                 startPos.x - radius,
                 startPos.y - radius
             };
-            float bubble_rotation = { 0 };
-            float bubble_scale = radius * 2;
-            DrawTextureEx(bubble_texture, bubble_pos, bubble_rotation, bubble_scale, Fade(RAYWHITE, 0.25F));
+            float rotation = { 0 };
+            float scale = radius * 2;
+            DrawTextureEx(circle_texture, top_pos, rotation, scale, color);
+
+            // BASE CIRCLE
+            radius = radius * 0.70F;
+            scale = radius * 2;
+            Vector2 base_pos = {
+                endPos.x - radius,
+                endPos.y - radius
+            };
+            DrawTextureEx(circle_texture, base_pos, rotation, scale, color);
+            EndShaderMode();
+        }
+        
+        
+        if (p->visual_mode_active == GALAXY) {
+            p->mode = MODE_EXPONENTIAL;
+
+            BeginShaderMode(p->circle);
+            Texture2D circle_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+
+            float rotation = { 0 };
+
+            // NEW FFT ROTATION STYLE, USE LINE AND SHADERS
+            color = ColorFromHSV(hue * 360 + GetFrameTime(), sat, val);
+            Vector2 center_panel_main{
+                panel_display.x + (panel_display.width * 0.5F),
+                panel_display.y + (panel_display.height * 0.55F)
+            };
+
+            float value = sqrt(final_amplitude) * panel_display.height * 0.45F;
+            float angle = (360.0F / 50.0F) * i;
+            //float angle = 0.5F * (float)i;
+            Vector2 startPos_fft_rotation = center_panel_main;
+
+            Vector2 endPos_fft_rotation = {
+                startPos_fft_rotation.x + (sin(angle) * value),
+                startPos_fft_rotation.y + (cos(angle) * value)
+            };
+
+            Vector2 Pos_40 = {
+                startPos_fft_rotation.x + (sin(angle) * value) * 0.4F,
+                startPos_fft_rotation.y + (cos(angle) * value) * 0.4F
+            };
+            Vector2 Pos_70 = {
+                startPos_fft_rotation.x + (sin(angle) * value) * 0.7F,
+                startPos_fft_rotation.y + (cos(angle) * value) * 0.7F
+            };
+            Vector2 Pos_90 = {
+                startPos_fft_rotation.x + (sin(angle) * value) * 0.9F,
+                startPos_fft_rotation.y + (cos(angle) * value) * 0.9F
+            };
+            Vector2 Pos_100 = {
+                startPos_fft_rotation.x + (sin(angle) * value) * 0.9F,
+                startPos_fft_rotation.y + (cos(angle) * value) * 0.9F
+            };
+            //DrawLineEx(startPos_fft_rotation, endPos_fft_rotation, 2.0, color);
+
+            {
+                float radius_40 = sqrt(value) * 1.25F;
+                float scale = radius_40 * 2;
+                Vector2 base_40_pos = {
+                    Pos_40.x - radius_40,
+                    Pos_40.y - radius_40,
+                };
+                DrawTextureEx(circle_texture, base_40_pos, rotation, scale, color);
+                //DrawTextureEx(circle_texture, base_40_pos, rotation, scale, WHITE);
+
+                //float radius_70 = value * 0.05F;
+                float radius_70 = 2.50F;
+                scale = radius_70 * 2;
+                Vector2 base_70_pos = {
+                    Pos_70.x - radius_70,
+                    Pos_70.y - radius_70,
+                };
+                //DrawTextureEx(circle_texture, base_70_pos, rotation, scale, color);
+                DrawTextureEx(circle_texture, base_70_pos, rotation, scale, WHITE);
+
+                float radius_90 = value * 0.2F;
+                scale = radius_90 * 2;
+                Vector2 base_90_pos = {
+                    Pos_90.x - radius_90,
+                    Pos_90.y - radius_90,
+                };
+                //DrawTextureEx(circle_texture, base_90_pos, rotation, scale, color);
+
+                float radius_100 = sqrt(value) * 0.75F;
+                scale = radius_100 * 2;
+                Vector2 base_100_pos = {
+                    Pos_100.x - radius_100,
+                    Pos_100.y - radius_100,
+                };
+                DrawTextureEx(circle_texture, base_100_pos, rotation, scale, color);
+                //DrawTextureEx(circle_texture, base_100_pos, rotation, scale, WHITE);
+
+            }
             EndShaderMode();
         }
 
-        // DRAW CIRCLE USING SHADERS
-        radius = bar_w * sqrt(final_amplitude) * 1.20F * 2;
-        BeginShaderMode(p->circle);
-        Texture2D circle_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
-
-        // TOP CIRCLE
-        Vector2 top_pos = {
-            startPos.x - radius,
-            startPos.y - radius
-        };
-        float rotation = { 0 };
-        float scale = radius * 2;
-        //DrawTextureEx(circle_texture, top_pos, rotation, scale, color);
-
-        // BASE CIRCLE
-        radius = radius * 0.70F;
-        scale = radius * 2;
-        Vector2 base_pos = {
-            endPos.x - radius,
-            endPos.y - radius
-        };
-        //DrawTextureEx(circle_texture, base_pos, rotation, scale, color);
-
-        
-        // NEW FFT ROTATION STYLE, USE LINE AND SHADERS
-        color = ColorFromHSV(hue * 360 + GetFrameTime(), sat, val);
-        Vector2 center_panel_main{
-            panel_display.x + (panel_display.width * 0.5F),
-            panel_display.y + (panel_display.height * 0.495F)
-        };
-
-        float value = sqrt(final_amplitude)*panel_display.height * 0.4F;
-        float angle = (360.0F / 50.0F) * i;
-        //float angle = 0.5F * (float)i;
-        Vector2 startPos_fft_rotation = center_panel_main;
-
-        Vector2 endPos_fft_rotation = {
-            startPos_fft_rotation.x + (sin(angle) * value),
-            startPos_fft_rotation.y + (cos(angle) * value)
-        };
-
-        Vector2 Pos_40 = {
-            startPos_fft_rotation.x + (sin(angle) * value) * 0.4F,
-            startPos_fft_rotation.y + (cos(angle) * value) * 0.4F
-        };
-        Vector2 Pos_70 = {
-            startPos_fft_rotation.x + (sin(angle) * value) * 0.7F,
-            startPos_fft_rotation.y + (cos(angle) * value) * 0.7F
-        };
-        Vector2 Pos_90 = {
-            startPos_fft_rotation.x + (sin(angle) * value) * 0.9F,
-            startPos_fft_rotation.y + (cos(angle) * value) * 0.9F
-        };
-        Vector2 Pos_100 = {
-            startPos_fft_rotation.x + (sin(angle) * value) * 0.9F,
-            startPos_fft_rotation.y + (cos(angle) * value) * 0.9F
-        };
-        //DrawLineEx(startPos_fft_rotation, endPos_fft_rotation, 2.0, color);
-        {
-
-            float radius_40 = sqrt(value) * 1.0F;
-            float scale = radius_40 * 2;
-            Vector2 base_40_pos = {
-                Pos_40.x - radius_40,
-                Pos_40.y - radius_40,
-            };
-            //DrawTextureEx(circle_texture, base_40_pos, rotation, scale, color);
-            //DrawTextureEx(circle_texture, base_40_pos, rotation, scale, WHITE);
-
-            //float radius_70 = value * 0.05F;
-            float radius_70 = 2.50F;
-            scale = radius_70 * 2;
-            Vector2 base_70_pos = {
-                Pos_70.x - radius_70,
-                Pos_70.y - radius_70,
-            };
-            //DrawTextureEx(circle_texture, base_70_pos, rotation, scale, color);
-            //DrawTextureEx(circle_texture, base_70_pos, rotation, scale, WHITE);
-
-            float radius_90 = value * 0.2F;
-            scale = radius_90 * 2;
-            Vector2 base_90_pos = {
-                Pos_90.x - radius_90,
-                Pos_90.y - radius_90,
-            };
-            //DrawTextureEx(circle_texture, base_90_pos, rotation, scale, color);
-
-            float radius_100 = sqrt(value) * 0.75F;
-            scale = radius_100 * 2;
-            Vector2 base_100_pos = {
-                Pos_100.x - radius_100,
-                Pos_100.y - radius_100,
-            };
-            //DrawTextureEx(circle_texture, base_100_pos, rotation, scale, color);
-            //DrawTextureEx(circle_texture, base_100_pos, rotation, scale, WHITE);
-
-        }
-
-        EndShaderMode();
-
     }
 
-    // Make Rectangle
-    Rectangle base{ panel_display };
-    int JUMLAH_RECT = 100;
-    float coef_rect = 0.955F;
-    std::deque<Rectangle> landscape_rects{};
+    if (p->visual_mode_active == LANDSCAPE) {
+        p->mode = MODE_NATURAL;
 
-    for (int i = 0; i < JUMLAH_RECT; i++) {
-        Rectangle edited = {
-            base.x + ((base.width - base.width * coef_rect) / 2),
-            base.y + base.height * 0.025F * coef_rect,
-            base.width * coef_rect,
-            base.height * coef_rect
-        };
+        // Make Rectangle
+        Rectangle base{ panel_display };
+        int JUMLAH_RECT = 100;
+        float coef_rect = 0.955F;
+        std::deque<Rectangle> landscape_rects{};
 
-        landscape_rects.push_back(edited);
-        //landscape_rects.push_front(edited);
-        coef_rect += 0.00015F;
+        for (int i = 0; i < JUMLAH_RECT; i++) {
+            Rectangle edited = {
+                base.x + ((base.width - base.width * coef_rect) / 2),
+                base.y + base.height * 0.025F * coef_rect,
+                base.width * coef_rect,
+                base.height * coef_rect
+            };
 
-        base = edited;
+            landscape_rects.push_back(edited);
+            //landscape_rects.push_front(edited);
+            coef_rect += 0.00015F;
 
-        //DrawRectangleLinesEx(edited, 1.0F, RED);
-    }
+            base = edited;
 
-    std::unique_ptr<Vector2[]> spline_pointer_smart(new Vector2[BUCKETS]);
-
-    static float time_check{};
-    time_check += dt;
-    float frame_rate_capture = 40; // FPS
-    float time_to_capture{ 1.0F / frame_rate_capture };
-    if (time_check >= time_to_capture) {
-
-        std::vector<Vector2> points{};
-        for (int i = 0; i < BUCKETS; i++) {
-            points.push_back(pointsArray_Norm_smart[i]);
+            //DrawRectangleLinesEx(edited, 1.0F, RED);
         }
 
-        if (landscape_splines.size() >= JUMLAH_RECT) {
-            landscape_splines.pop_back();
-        }
-        landscape_splines.push_front(points);
+        std::unique_ptr<Vector2[]> spline_pointer_smart(new Vector2[BUCKETS]);
 
-        time_check = 0;
+        static float time_check{};
+        time_check += dt;
+        float frame_rate_capture = 40; // FPS
+        float time_to_capture{ 1.0F / frame_rate_capture };
+        if (time_check >= time_to_capture) {
+
+            std::vector<Vector2> points{};
+            for (int i = 0; i < BUCKETS; i++) {
+                points.push_back(pointsArray_Norm_smart[i]);
+            }
+
+            if (landscape_splines.size() >= JUMLAH_RECT) {
+                landscape_splines.pop_back();
+            }
+            landscape_splines.push_front(points);
+
+            time_check = 0;
+        }
+
+        float thick = 1.0F;
+        for (int i = 0; i < landscape_splines.size(); i++) {
+            Rectangle rect = landscape_rects.at(i);
+
+            for (int j = 0; j < BUCKETS; j++) {
+                spline_pointer_smart[j] = {
+                    rect.x + rect.width * landscape_splines.at(i)[j].x,
+                    rect.y + rect.height * landscape_splines.at(i)[j].y
+                };
+            }
+            DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 6.0F * thick, Fade(SKYBLUE, thick / 4));
+            DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 1.25F * thick, LIGHTGRAY);
+
+            //DrawSplineBasis(spline_pointer_smart.get(), BUCKETS, thick, LIGHTGRAY);
+            //DrawRectangleLinesEx(rect, .4F, BLUE);
+
+            thick *= 0.97F;
+        }
+
+        Color color = BLUE;
+
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 13.0F, Fade(color, 0.1F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 10.0F, Fade(color, 0.15F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 7.0F, Fade(color, 0.2F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 5.0F, Fade(color, 0.25F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 2.5F, Fade(WHITE, 1.0F));
     }
 
     
-
-    float thick = 1.0F;
-    for (int i = 0; i < landscape_splines.size(); i++) {
-        Rectangle rect = landscape_rects.at(i);
-
-        for (int j = 0; j < BUCKETS; j++) {
-            spline_pointer_smart[j] = {
-                rect.x + rect.width * landscape_splines.at(i)[j].x,
-                rect.y + rect.height * landscape_splines.at(i)[j].y
-            };
-        }
-        DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 6.0F * thick, Fade(SKYBLUE, thick / 4));
-        DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 1.25F * thick, LIGHTGRAY);
-
-        //DrawSplineBasis(spline_pointer_smart.get(), BUCKETS, thick, LIGHTGRAY);
-        //DrawRectangleLinesEx(rect, .4F, BLUE);
-
-        thick *= 0.97F;
-    }
-
-    Color color = BLUE;
-
-    DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 13.0F, Fade(color, 0.1F));
-    DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 10.0F, Fade(color, 0.15F));
-    DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 7.0F, Fade(color, 0.2F));
-    DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 5.0F, Fade(color, 0.25F));
-    DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 2.5F, Fade(WHITE, 1.0F));
-
-
-    // DRAW MUSIC MODE
-    DrawMusicPlayMode(panel_main, dt);
+    // DRAW PLAY MODE BUTTON
+    DrawMusicPlayModeButton(panel_main, dt);
 
     // DRAW FULLSCREEN BUTTON
     DrawFullscreenButton(panel_main, dt);
 
+    // DRAW VISUAL MODE BUTTON
+    DrawVisualModeButton(panel_main, dt);
+
+
 }
+
+void DrawVisualModeButton(Rectangle& panel_main, float dt)
+{
+    float visual_mode_hover_size = panel_main.height / 4;
+    float space = 10;
+    Rectangle visual_mode_button_area_hover{
+        panel_main.x + panel_main.width - (visual_mode_hover_size + space),
+        panel_main.y + space,
+        visual_mode_hover_size,
+        visual_mode_hover_size
+    };
+    static float alpha_coef{};
+    if (p->fullscreen) {
+        if (CheckCollisionPointRec(mouse_position, visual_mode_button_area_hover)) {
+            if (alpha_coef <= 1.0F) {
+                alpha_coef += sqrtf(dt);
+            }
+        }
+        else {
+            if (alpha_coef >= 0.0F) {
+                alpha_coef -= sqrtf(dt) / 4;
+            }
+        }
+    }
+    else alpha_coef = 1.0F;
+
+    bool draw_button = alpha_coef > 0.0F;
+
+    if (draw_button) {
+        font = &font_visual_mode;
+        float visual_mode_btn_width = 150;
+        float visual_mode_btn_height = visual_mode_btn_width * 0.275F;
+        float space = 10.0F;
+        Color button_color = { 69, 69, 69, 255 };
+        Rectangle visual_mode_panel{
+            panel_main.x + panel_main.width - (visual_mode_btn_width + space),
+            panel_main.y + space + 2,
+            visual_mode_btn_width,
+            visual_mode_btn_height
+        };
+    
+        if ((p->visual_mode_expand == ON) || (CheckCollisionPointRec(mouse_position, visual_mode_panel))) {
+            DrawRectangleRounded(visual_mode_panel, 0.2F, 10, Fade(button_color, 0.4F * alpha_coef));
+        }
+    
+        const char* text = "Visual Mode";
+        float font_coef = 0.65F;
+        float font_size = visual_mode_panel.height * font_coef;
+        float font_space = 0.75F;
+        Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+        Vector2 text_coor = {
+            visual_mode_panel.x + space * 1.25F,
+            visual_mode_panel.y + (visual_mode_panel.height - text_measure.y) / 2
+        };
+        if (CheckCollisionPointRec(mouse_position, visual_mode_panel) || p->visual_mode_expand == ON) {
+            DrawTextEx(*font, text, text_coor, font_size, font_space, Fade(WHITE, alpha_coef));
+        }
+    
+        float icon_width = visual_mode_panel.height;
+        Rectangle icon_panel{
+            visual_mode_panel.x + visual_mode_panel.width - icon_width,
+            visual_mode_panel.y,
+            icon_width,
+            icon_width
+        };
+        float pad = 7.0F;
+        Rectangle icon_rect{
+            icon_panel.x + (pad * 1),
+            icon_panel.y + (pad * 1),
+            icon_panel.width - (pad * 2),
+            icon_panel.height - (pad * 2),
+        };
+    
+        Color icon_color{ LIGHTGRAY };
+        size_t visual_mode_icon_index{};
+    
+        if (p->visual_mode_expand == OFF) visual_mode_icon_index = 0;
+        else visual_mode_icon_index = 1;
+
+        float icon_size = 100.0F;
+        Rectangle dest{ icon_rect };
+        Rectangle source{ visual_mode_icon_index * icon_size, 0, icon_size, icon_size };
+        DrawTexturePro(POINTER_TEX, source, dest, { 0,0 }, 0, Fade(icon_color, 1.0F * alpha_coef));
+
+        // Toggle visual_mode_expand state
+        if (CheckCollisionPointRec(mouse_position, visual_mode_panel)) {
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                p->visual_mode_expand = !p->visual_mode_expand;
+            }
+        }
+        
+        float visual_mode_expand_base_w = visual_mode_panel.width * 1.0F;
+        float visual_mode_expand_base_h = visual_mode_panel.height * 0.8F;
+        if (p->visual_mode_expand == ON) {
+            alpha_coef = 1.0F;
+            Rectangle visual_mode_expand_base{
+                visual_mode_panel.x + (visual_mode_panel.width - visual_mode_expand_base_w) / 2,
+                visual_mode_panel.y + visual_mode_panel.height + space,
+                visual_mode_expand_base_w,
+                visual_mode_expand_base_h * p->visualmode.size()
+            };
+            DrawRectangleRounded(visual_mode_expand_base, 0.1F, 10, Fade(button_color, 0.15F));
+
+            // DRAWING ALL VISUAL MODE CHILD
+            for (size_t i = 0; i < p->visualmode.size(); i++) {
+                VisualMode visual_mode_child = p->visualmode.at(i);
+                Color active_color{ 105, 220, 57, 255 };
+
+                Rectangle visual_mode_child_panel{
+                    visual_mode_expand_base.x,
+                    visual_mode_expand_base.y + (i * visual_mode_expand_base_h),
+                    visual_mode_expand_base.width,
+                    visual_mode_expand_base_h,
+                };
+
+                float pad = 3.0F;
+                Rectangle visual_mode_active{
+                    visual_mode_child_panel.x,
+                    visual_mode_child_panel.y + (pad * 1),
+                    visual_mode_child_panel.width,
+                    visual_mode_child_panel.height - (pad * 2)
+                };
+
+                // HOVER && ACTIVE MODE
+                if (p->visual_mode_active == i) {
+                    DrawRectangleRounded(visual_mode_active, 0.1F, 10, Fade(active_color, 0.5F));
+                }
+                else if (CheckCollisionPointRec(mouse_position, visual_mode_active) && (visual_mode_child.enable == ON)) {
+                    DrawRectangleRounded(visual_mode_active, 0.1F, 10, Fade(active_color, 0.5F));
+
+                    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                        p->visual_mode_active = i;
+                        p->visual_mode_expand = OFF;
+                    }
+                }
+
+                Color font_color = WHITE;
+                if (visual_mode_child.enable == OFF) font_color = DARKGRAY;
+
+                font = &font_visual_mode_child;
+
+                // VISUAL MODE TITLE
+                const char* text = visual_mode_child.title.c_str();
+                float font_size = visual_mode_active.height * 0.9F;
+                float font_space = 0.0F;
+                space = 8.0F;
+                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+                Vector2 text_coor = {
+                    visual_mode_active.x + space,
+                    visual_mode_active.y + (visual_mode_active.height - text_measure.y) / 2,
+                };
+                DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
+
+                // VISUAL MODE SHORTCUT
+                text = visual_mode_child.shortcut.c_str();
+                text_measure = MeasureTextEx(*font, text, font_size, font_space);
+                text_coor = {
+                    visual_mode_active.x + visual_mode_active.width - (text_measure.x + space),
+                    visual_mode_active.y + (visual_mode_active.height - text_measure.y) / 2,
+                };
+                DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
+                
+
+    
+            }
+    
+        }
+
+        Rectangle visual_mode_panel_base{
+            visual_mode_panel.x,
+            visual_mode_panel.y,
+            visual_mode_expand_base_w,
+            visual_mode_panel.height + space + visual_mode_expand_base_h * 4
+        };
+        //DrawRectangleRounded(visual_mode_panel_base, 0.1F, 10, Fade(LIGHTGRAY, 0.05F));
+        
+        // Close expanded panel if click outside visual_mode_panel_base
+        if (!CheckCollisionPointRec(mouse_position, visual_mode_panel_base)) {
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                p->visual_mode_expand = OFF;
+            }
+        }
+
+    }
+    
+    // VISUAL MODE SHORTCUT KEY
+    if (IsKeyDown(KEY_VISUAL_MODE) && IsKeyPressed(KEY_ONE)) {
+        if (p->visualmode.at(CLASSIC).enable == ON) {
+            p->visual_mode_active = CLASSIC;
+        }
+    }
+    else if (IsKeyDown(KEY_VISUAL_MODE) && IsKeyPressed(KEY_TWO)) {
+        if (p->visualmode.at(GALAXY).enable == ON) {
+            p->visual_mode_active = GALAXY;
+        }
+    }
+    else if (IsKeyDown(KEY_VISUAL_MODE) && IsKeyPressed(KEY_THREE)) {
+        if (p->visualmode.at(LANDSCAPE).enable == ON) {
+            p->visual_mode_active = LANDSCAPE;
+        }
+    }
+    else if (IsKeyDown(KEY_VISUAL_MODE) && IsKeyPressed(KEY_FOUR)) {
+        if (p->visualmode.at(SPECTOGRAM).enable == ON) {
+            p->visual_mode_active = SPECTOGRAM;
+        }
+    }
+
+}
+
 
 void DrawFullscreenButton(Rectangle& panel_main, float dt)
 {
+
+
     float fullscreen_hover_size = panel_main.height / 4;
     Rectangle fullscreen_btn_area_hover{
         panel_main.x + panel_main.width - (fullscreen_hover_size + 10), // add 10 to make space to border, to minimize mouse_stuck.
@@ -2489,18 +2908,18 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
 
     if (CheckCollisionPointRec(mouse_position, fullscreen_btn_area_hover)) {
         if (alpha_coef <= 1.0F) {
-            //alpha_coef += dt * 0.5F;
             alpha_coef += sqrtf(dt);
         }
     }
     else {
         if (alpha_coef >= 0.0F) {
-            //alpha_coef -= dt * 0.5F;
             alpha_coef -= sqrtf(dt) / 4;
         }
     }
 
     bool draw_icon = alpha_coef > 0.0F;
+    static float time_down{};
+    bool fullscreen_btn_clicked{ false };
 
     if (draw_icon) {
         float fullscreen_btn_size = 50.0F;
@@ -2521,14 +2940,19 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
         DrawRectangleRounded(fullscreen_btn, 0.25F, 10, Fade(LIGHTGRAY, 0.20F * alpha_coef));
 
         Color icon_color{};
-        static float time_down{};
+        //static float time_down{};
         if (p->fullscreen == OFF) {
             if (CheckCollisionPointRec(mouse_position, fullscreen_btn)) {
                 p->icon_fullscreen_index = 1;
                 icon_color = WHITE;
+
+                std::string info = "Expand [F]";
+                tooltip(fullscreen_btn, font_visual_mode_child, screen, info);
+
                 if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && (time_down <= 0.0F)) {
                     p->fullscreen = ON;
                     time_down = 0.1F;
+                    //fullscreen_btn_clicked = true;
                 }
             }
             else {
@@ -2540,9 +2964,14 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
             if (CheckCollisionPointRec(mouse_position, fullscreen_btn)) {
                 p->icon_fullscreen_index = 3;
                 icon_color = WHITE;
+
+                std::string info = "Collapse [F]";
+                tooltip(fullscreen_btn, font_visual_mode_child, screen, info);
+
                 if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && (time_down <= 0.0F)) {
                     p->fullscreen = OFF;
                     time_down = 0.1F;
+                    //fullscreen_btn_clicked = true;
                 }
             }
             else {
@@ -2551,16 +2980,25 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
             }
         }
 
-        if (time_down >= 0.0F) time_down -= dt;
+        //if (time_down > 0.0F) time_down -= dt;
 
         float icon_size = 100.0F;
         Rectangle dest{ fullscreen_btn };
         Rectangle source{ p->icon_fullscreen_index * icon_size, 0, icon_size, icon_size };
         DrawTexturePro(FULLSCREEN_TEX, source, dest, { 0,0 }, 0, Fade(icon_color, 1.0F * alpha_coef));
     }
+
+    if (IsKeyPressed(KEY_FULLSCREEN) && time_down <= 0.0F) {
+        p->fullscreen = !p->fullscreen;
+        time_down = 0.1F;
+    }
+
+    if (time_down > 0.0F) time_down -= dt;
+
+
 }
 
-void DrawMusicPlayMode(Rectangle& panel_main, float dt)
+void DrawMusicPlayModeButton(Rectangle& panel_main, float dt)
 {
 
     float play_mode_hover_size = panel_main.height / 4;
@@ -2620,6 +3058,12 @@ void DrawMusicPlayMode(Rectangle& panel_main, float dt)
         Color icon_color = LIGHTGRAY;
         if (CheckCollisionPointRec(mouse_position, play_mode_btn)) {
             icon_color = RAYWHITE;
+
+            std::string info{};
+            if (p->repeat == ON) info = "Repeat";
+            else info = "Loop";
+            tooltip(play_mode_btn, font_visual_mode_child, screen, info);
+
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                 p->repeat = !p->repeat;
             }
@@ -2801,6 +3245,12 @@ void DrawPlayPause(const Rectangle& play_rect, const Rectangle& hover_panel)
     Color icon_color = GRAY;
     if (CheckCollisionPointRec(mouse_position, hover_panel)) {
         icon_color = RAYWHITE;
+
+        std::string info{};
+        if (p->music_playing == ON) info = "Pause [Space]";
+        else info = "Play [Space]";
+        tooltip(hover_panel, font_visual_mode_child, screen, info);
+
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             p->music_playing = !p->music_playing;
         }
