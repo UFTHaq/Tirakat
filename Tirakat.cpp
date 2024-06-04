@@ -63,6 +63,30 @@
 
 // MAXIMUM MIDI FREQ -> G#9/Ab9 = 13289.75Hz
 
+
+// Features now:
+// 1. Drag & Drop single or multiple musics.
+// 2. Music format support : MP3, WAV, FLAC, & OGG.
+// 3. Play Pause music by mouse and KEY_SPACE.
+// 4. Volume control by mouse hold and drag, mouse wheel, press or hold down KEY_UP KEY_DOWN.
+// 5. Mute Unmute by KEY_M.
+// 6. Display playlists scrollable and can be re-arrange by mouse hold and drag.
+// 7. Display time of play and duration of musics.
+// 8. Music seek time in progress bar by mouse hold and drag, and press or hold down KEY_RIGHT KEY_LEFT.
+// 9. Display time domain signal of music as progress bar, make it easy to jump and seek to the wanted time.
+// 10.Display freq domain signal visualization (fft) in many modes and algorithms: Classic, Galaxy, Landscape.
+// 11.2 mode of Playlist, repeat and loop.
+// 12.Fullscreen display, by mouse and KEY_F.
+// 13.Lock Time Domain Display, if you want it, by mouse and KEY_L.
+//
+
+
+// For next release try to:
+// 1. Make Spectrogram.
+// 2. Make custom title bar maybe.
+// 3. Convert Image to Spectrogram, Spectrogram to audio? then i can see in my tirakat spectrogram mode.
+// 
+
 #include <iostream>
 #include <filesystem>
 #include <memory>
@@ -102,6 +126,7 @@
 #define ICON_DELETE_LOC     {"resources/Icons/Trash.png"}
 #define ICON_MODE_LOC       {"resources/Icons/Mode.png"}
 #define ICON_POINTER_LOC    {"resources/Icons/Pointer.png"}
+#define ICON_LOCK_LOC       {"resources/Icons/Lock.png"}
 
 #define HUD_TIMER_SECS 1.5F
 #define PANEL_LEFT_WIDTH 275.0F
@@ -133,10 +158,11 @@
 #define POPUP_CANCEL_COLOR          Color{ 142, 149, 178, 255 }
 #define TARGET_DONE_COLOR           Color{  80, 180, 120, 255 }
 
-#define KEY_TOGGLE_PLAY KEY_SPACE
-#define KEY_TOGGLE_MUTE KEY_M
-#define KEY_FULLSCREEN  KEY_F
-#define KEY_VISUAL_MODE KEY_V 
+#define KEY_TOGGLE_PLAY         KEY_SPACE
+#define KEY_TOGGLE_MUTE         KEY_M
+#define KEY_FULLSCREEN          KEY_F
+#define KEY_VISUAL_MODE         KEY_V 
+#define KEY_LOCK_TIME_DOMAIN    KEY_L
 
 enum Page {
     PAGE_DRAG_DROP,
@@ -212,6 +238,9 @@ struct Plug {
     std::vector<VisualMode> visualmode{visualM1, visualM2, visualM3, visualM4};
     size_t visual_mode_active{ 2 };
     Notification notification{};
+    float mouse_onscreen_timer{ HUD_TIMER_SECS };
+    bool visual_time_domain_lock{ ON };
+    size_t icon_lock_index{};
 };
 
 Plug tirakat{};
@@ -248,8 +277,8 @@ const int N{ 1 << 10 };
 fftw_complex* in = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
 fftw_complex* out = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
 
-//const int BUCKETS{ 1 << 6 };
-const int BUCKETS{ 80 };
+const int BUCKETS{ 1 << 6 };
+//const int BUCKETS{ 80 };
 std::array<float, BUCKETS> Spectrum{};
 std::array<float, BUCKETS + 1> Freq_Bin{};
 
@@ -326,12 +355,15 @@ float natural_scale(float amplitude, float Fit_factor) {
 float exponential_scale(float amplitude, float Fit_factor) {
     //return std::log10(amplitude * Fit_factor) * Fit_factor;
     return std::log10(amplitude) * Fit_factor;
+    //return sqrtf(std::log10(amplitude) * Fit_factor);
 }
 
 float multi_peak_scale(float amplitude, int i, float Fit_factor, const std::array<PeakInfo, BUCKETS>& Peak) {
     if (Peak.at(i).frequency_index >= 0) {
         if (i < 5) return amplitude / Peak.at(i).amplitude * Fit_factor * 1.3F; // untuk membuat drum bass pada awal bins lebih naik.
         else return amplitude / Peak.at(i).amplitude * Fit_factor;
+        //else return sqrtf(amplitude / Peak.at(i).amplitude * Fit_factor) * 0.7F;
+        //else return (amplitude / Peak.at(i).amplitude * Fit_factor) * (amplitude / Peak.at(i).amplitude * Fit_factor);
     }
     else {
         return amplitude * Fit_factor;
@@ -373,6 +405,10 @@ float normalization(float val, float min_val, float max_val) {
     return (val - min_val) / (max_val - min_val);
 }
 
+float millisecondsToSeconds(int milliseconds) {
+    return static_cast<float>(milliseconds) / 1000;
+}
+
 
 void InitFile(const std::filesystem::path& filename);
 
@@ -402,7 +438,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag);
 
 void DrawPopUpReset(Rectangle& panel_main);
 
-void DrawProgressTimeDomain(Rectangle& panel, float progress_w);
+void DrawVisualTimeDomainProgress(Rectangle& panel, float progress_w);
 
 void DrawMedia(Rectangle& panel_media);
 
@@ -415,6 +451,8 @@ void DeleteMusic(int& retFlag, size_t order);
 void ResetVisualizerParameter();
 
 void DrawMainDisplay(Rectangle& panel_main);
+
+void DrawLockButton(Rectangle& panel_main, float dt);
 
 void DrawVisualModeButton(Rectangle& panel_main, float dt);
 
@@ -451,7 +489,7 @@ static std::vector<float> ExtractMusicData(std::string& filename) {
 
     // Downsampling
     std::vector<float> processed_signal{};
-    int downsampling_rate = int(total_frames / 9000);
+    int downsampling_rate = int(total_frames / 10000);
     std::cout << "downsampling rate : " << downsampling_rate << std::endl;
     for (size_t i = 0; i < audio_data.size(); i += downsampling_rate) {
         float sample = audio_data.at(i);
@@ -576,12 +614,13 @@ Texture2D DELETE_TEX{};
 Texture2D X_TEX{};
 Texture2D MODE_TEX{};
 Texture2D POINTER_TEX{};
+Texture2D LOCK_TEX{};
 
 std::ostringstream formatted_duration{};
 std::ostringstream formatted_progress{};
 
-int music_time{};
-int duration{};
+int music_time_now{};
+int music_duration{};
 int time_played = 1;
 
 Music music{};
@@ -616,11 +655,14 @@ int main()
     std::cout << "Hello World!\n";
     std::cout << "RAYLIB VERSION: " << RAYLIB_VERSION << std::endl;
 
-    screen = { 1200, 700 };
+    screen = { 1000, 600 };
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_ALWAYS_RUN);
     SetConfigFlags(FLAG_MSAA_4X_HINT);
-    SetConfigFlags(FLAG_WINDOW_UNDECORATED);
+    //SetConfigFlags(FLAG_WINDOW_UNDECORATED);
+    //SetConfigFlags(FLAG_VSYNC_HINT);
+    //SetConfigFlags(FLAG_WINDOW_TRANSPARENT);
+    //SetConfigFlags(FLAG_WINDOW_MOUSE_PASSTHROUGH);
 
     InitWindow((int)screen.w, (int)screen.h, "Tirakat");
     InitAudioDevice();
@@ -686,6 +728,10 @@ int main()
     POINTER_TEX = LoadTextureFromImage(pointer_icon);
     SetTextureFilter(POINTER_TEX, TEXTURE_FILTER_BILINEAR);
 
+    Image lock_icon = LoadImage(ICON_LOCK_LOC);
+    LOCK_TEX = LoadTextureFromImage(lock_icon);
+    SetTextureFilter(LOCK_TEX, TEXTURE_FILTER_BILINEAR);
+
 
     p->circle = LoadShader(NULL, "resources/shaders/circle.fs");
     p->bubble = LoadShader(NULL, "resources/shaders/bubble.fs");
@@ -714,7 +760,7 @@ int main()
     make_bins();
 
     while (!WindowShouldClose()) {
-        SetWindowMinSize(800, 450);
+        SetWindowMinSize(1000, 600);
 
         if (zero_data == true) {
             p->page = PAGE_DRAG_DROP;
@@ -729,7 +775,7 @@ int main()
 
 
         BeginDrawing();
-        ClearBackground(BASE_COLOR);
+        ClearBackground(Fade(BASE_COLOR, 0.5F));
 
         mouse_position = GetMousePosition();
 
@@ -816,7 +862,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         SetMouseCursor(MOUSE_CURSOR_DEFAULT);
     }
 
-    duration = data.at(music_play).duration;
+    music_duration = data.at(music_play).duration;
 
     if (p->reset_time == true) {
         SeekMusicStream(music, 0.1F);
@@ -838,7 +884,8 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             interval_time -= GetFrameTime();
         }
         else {
-            float music_move_to = (static_cast<float>(music_time) / 1000) - 5.0F;
+            float music_move_to = millisecondsToSeconds(music_time_now) - 5.0F;
+            if (music_move_to < 0.1F) music_move_to = 0.1F;
             SeekMusicStream(music, music_move_to);
             //std::cout << "LEFT ARROW : -5 SECONDS" << std::endl;
             interval_time = INTERVAL;
@@ -855,7 +902,8 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             interval_time -= GetFrameTime();
         }
         else {
-            float music_move_to = (static_cast<float>(music_time) / 1000) + 5.0F;
+            float music_move_to = millisecondsToSeconds(music_time_now) + 5.0F;
+            if (music_move_to > millisecondsToSeconds(music_duration)) music_move_to = millisecondsToSeconds(music_duration) - 0.1F;
             SeekMusicStream(music, music_move_to);
             //std::cout << "RIGHT ARROW : +5 SECONDS" << std::endl;
             interval_time = INTERVAL;
@@ -865,24 +913,41 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             p->notification.g_info_timer = HUD_TIMER_SECS;
         }
     }
-    else if (IsKeyPressed(KEY_UP)) {
-        SetMasterVolume(volume + 0.05F);
+    else if (IsKeyDown(KEY_UP)) {
+        if (interval_time > 0.0F) {
+            interval_time -= GetFrameTime();
+        }
+        else {
+            volume += 0.05F;
+            if (volume > 1) volume = 1;
+            SetMasterVolume(volume);
 
-        std::string info{ std::to_string(static_cast<int>(GetMasterVolume() * 100)) + "%" };
-        p->notification.g_info = info;
-        p->notification.g_info_timer = HUD_TIMER_SECS;
+            std::string info{ std::to_string(static_cast<int>(volume * 100)) + "%" };
+            p->notification.g_info = info;
+            p->notification.g_info_timer = HUD_TIMER_SECS;
+            interval_time = INTERVAL;
+        }
     }
-    else if (IsKeyPressed(KEY_DOWN)) {
-        SetMasterVolume(volume - 0.05F);
+    else if (IsKeyDown(KEY_DOWN)) {
+        if (interval_time > 0.0F) {
+            interval_time -= GetFrameTime();
+        }
+        else {
+            volume -= 0.05F;
+            if (volume < 0) volume = 0;
+            SetMasterVolume(volume);
 
-        std::string info{ std::to_string(static_cast<int>(GetMasterVolume() * 100)) + "%" };
-        p->notification.g_info = info;
-        p->notification.g_info_timer = HUD_TIMER_SECS;
+            std::string info{ std::to_string(static_cast<int>(volume * 100)) + "%" };
+            p->notification.g_info = info;
+            p->notification.g_info_timer = HUD_TIMER_SECS;
+            interval_time = INTERVAL;
+        }
     }
     else {
         interval_time = 0;
     }
 
+    // Important to re rise after each moving the progress time to play the sound smooth with no sudden change in buffer sound.
     static float music_volume = 0.5F;
     if (music_volume < 0.5F) music_volume += 0.02F;
 
@@ -905,14 +970,14 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             need_resume = false;
         }
 
-        int threshold_80 = static_cast<int>(duration * 0.8F);
+        int threshold_80 = static_cast<int>(music_duration * 0.8F);
         //std::cout << time_played << " : " << music_time << std::endl;
 
         // COUNTING REPETITION
         static bool repetition_saved = false;
         if (repetition_saved == false) {
 
-            if (music_time >= (duration - 100)) {
+            if (music_time_now >= (music_duration - 100)) {
 
                 if (time_played >= threshold_80) {
                     data.at(music_play).counter++;
@@ -951,7 +1016,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
 
 
     if (p->dragging != DRAG_MUSIC_PROGRESS) {
-        music_time = static_cast<int>(GetMusicTimePlayed(music) * 1000);
+        music_time_now = static_cast<int>(GetMusicTimePlayed(music) * 1000);
     }
 
     Rectangle panel_media{};
@@ -967,10 +1032,8 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
     // FULLSCREEN
     if (p->fullscreen) {
 
-        static float mouse_onscreen_timer = HUD_TIMER_SECS;
-
-        if (mouse_onscreen_timer > 0.0F) {
-            mouse_onscreen_timer -= GetFrameTime();
+        if (p->mouse_onscreen_timer > 0.0F) {
+            p->mouse_onscreen_timer -= GetFrameTime();
             p->mouse_onscreen = ON;
         }
         else {
@@ -979,10 +1042,11 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
 
         Vector2 delta = GetMouseDelta();
         bool moved = fabsf(delta.x) + fabsf(delta.y) > 0.0;
-        if (moved) mouse_onscreen_timer = HUD_TIMER_SECS;
+        if (moved) p->mouse_onscreen_timer = HUD_TIMER_SECS;
 
         float panel_progress_height = PANEL_PROGRESS_HEIGHT;
-        if (p->mouse_onscreen == OFF) panel_progress_height = 3.0F;
+        if (p->mouse_onscreen == OFF && p->visual_time_domain_lock == OFF) panel_progress_height = 3.0F;
+        
 
         // PANEL MAIN
         panel_main = {
@@ -1002,7 +1066,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         //DrawRectangleRec(panel_progress, PANEL_COLOR);
         DrawRectangleRec(panel_progress, PANEL_PROGRESS_BASE_COLOR);
 
-        if (p->mouse_onscreen == ON) {
+        if (p->mouse_onscreen == ON || p->visual_time_domain_lock == ON) {
             float pad_time_domain = 7.5F;
             panel_progress = {
                 panel_progress.x + (pad_time_domain * 1),
@@ -1033,6 +1097,9 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         if (p->popup_on) {
             DrawPopUpReset(panel_main);
         }
+
+
+        
 
     }
 
@@ -1491,7 +1558,7 @@ void DrawPopUpReset(Rectangle& panel_main)
     }
 }
 
-void DrawProgressTimeDomain(Rectangle& panel, float progress_w)
+void DrawVisualTimeDomainProgress(Rectangle& panel, float progress_w)
 {
     float progress = progress_w + panel.x;
     Color color = DARKGRAY;
@@ -1880,6 +1947,9 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
 
                             DetachAudioStreamProcessor(music.stream, callback);
                             ResetVisualizerParameter();
+
+                            // Reset music_time sebelum pindah lagu biar tidak overflow ke lagu selanjutnya
+                            music_time_now = 100; // milliseconds
 
                             music_play = i;
                             music = LoadMusicStream(data.at(music_play).path.c_str());
@@ -2660,7 +2730,9 @@ void DrawMainDisplay(Rectangle& panel_main)
         // Make Rectangle
         Rectangle base{ panel_display };
         int JUMLAH_RECT = 100;
-        float coef_rect = 0.955F;
+        //int JUMLAH_RECT = 150;
+        //float coef_rect = 0.955F;
+        float coef_rect = 0.96F;
         std::deque<Rectangle> landscape_rects{};
 
         for (int i = 0; i < JUMLAH_RECT; i++) {
@@ -2672,8 +2744,11 @@ void DrawMainDisplay(Rectangle& panel_main)
             };
 
             landscape_rects.push_back(edited);
+            
+            // Inverse
             //landscape_rects.push_front(edited);
-            coef_rect += 0.00015F;
+            //coef_rect += 0.00015F;
+            coef_rect += 0.00009F;
 
             base = edited;
 
@@ -2712,7 +2787,11 @@ void DrawMainDisplay(Rectangle& panel_main)
                 };
             }
             DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 6.0F * thick, Fade(SKYBLUE, thick / 4));
-            DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 1.25F * thick, LIGHTGRAY);
+            DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 1.5F * thick, LIGHTGRAY);
+
+            // Inverse
+            //DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 4.0F * (1-thick), Fade(SKYBLUE, (1 - thick) / 4));
+            //DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 2.F * (1 - thick), LIGHTGRAY);
 
             //DrawSplineBasis(spline_pointer_smart.get(), BUCKETS, thick, LIGHTGRAY);
             //DrawRectangleLinesEx(rect, .4F, BLUE);
@@ -2722,13 +2801,15 @@ void DrawMainDisplay(Rectangle& panel_main)
 
         Color color = BLUE;
 
-        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 13.0F, Fade(color, 0.1F));
-        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 10.0F, Fade(color, 0.15F));
-        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 7.0F, Fade(color, 0.2F));
-        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 5.0F, Fade(color, 0.25F));
-        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 2.5F, Fade(WHITE, 1.0F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 15.0F, Fade(color, 0.1F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 13.0F, Fade(color, 0.15F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 9.0F, Fade(color, 0.2F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 7.0F, Fade(color, 0.25F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 3.5F, Fade(WHITE, 1.0F));
     }
 
+    // PANEL LOCK VISUAL TIME DOMAIN
+    DrawLockButton(panel_main, dt);
     
     // DRAW PLAY MODE BUTTON
     DrawMusicPlayModeButton(panel_main, dt);
@@ -2743,6 +2824,103 @@ void DrawMainDisplay(Rectangle& panel_main)
     NotificationTool(panel_main, font_visual_mode_child, p->notification.g_info, p->notification.g_info_timer, dt);
 
 
+}
+
+void DrawLockButton(Rectangle& panel_main, float dt)
+{
+    float panel_lock_area_hover_w = panel_main.height / 4;
+    Rectangle panel_lock_area_hover{
+        panel_main.x + (panel_main.width - panel_lock_area_hover_w) / 2,
+        panel_main.y + panel_main.height - panel_lock_area_hover_w,
+        panel_lock_area_hover_w,
+        panel_lock_area_hover_w
+    };
+    //DrawRectangleRec(panel_lock_area_hover, RED);
+    //if (p->mouse_onscreen == ON && (CheckCollisionPointRec(mouse_position, panel_lock_area_hover))) {
+    //    Rectangle 
+    //}
+    static float alpha_coef{};
+    if (CheckCollisionPointRec(mouse_position, panel_lock_area_hover)) {
+        if (alpha_coef <= 1.0F) {
+            alpha_coef += sqrtf(dt);
+        }
+    }
+    else {
+        if (alpha_coef >= 0.0F) {
+            alpha_coef -= sqrtf(dt) / 4;
+        }
+    }
+
+    bool draw_icon = alpha_coef > 0.0F;
+    static float time_down{};
+
+    if (draw_icon && p->fullscreen) {
+        p->mouse_onscreen_timer = HUD_TIMER_SECS;
+        float lock_btn_size = 50.0F;
+        float space = 5.0F;
+        Rectangle lock_panel{
+            panel_main.x + (panel_main.width - lock_btn_size) / 2,
+            panel_main.y + panel_main.height - (lock_btn_size + space - PANEL_LINE_THICK),
+            lock_btn_size,
+            lock_btn_size
+        };
+        float pad = 5.0F;
+        Rectangle lock_btn{
+            lock_panel.x + (pad * 1),
+            lock_panel.y + (pad * 1),
+            lock_panel.width - (pad * 2),
+            lock_panel.height - (pad * 2),
+        };
+        DrawRectangleRounded(lock_btn, 0.25F, 10, Fade(LIGHTGRAY, 0.20F * alpha_coef));
+
+        Color icon_color{};
+        if (p->visual_time_domain_lock == OFF) {
+            if (CheckCollisionPointRec(mouse_position, lock_btn)) {
+                icon_color = WHITE;
+
+                std::string info = "Lock Visual Time Domain [L]";
+                Tooltip(lock_btn, font_visual_mode_child, screen, info);
+
+                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && (time_down <= 0.0F)) {
+                    p->visual_time_domain_lock = ON;
+                    time_down = 0.1F;
+                }
+            }
+            else {
+                icon_color = LIGHTGRAY;
+            }
+        }
+        else {
+            if (CheckCollisionPointRec(mouse_position, lock_btn)) {
+                icon_color = WHITE;
+
+                std::string info = "Unlock Visual Time Domain [L]";
+                Tooltip(lock_btn, font_visual_mode_child, screen, info);
+
+                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && (time_down <= 0.0F)) {
+                    p->visual_time_domain_lock = OFF;
+                    time_down = 0.1F;
+                }
+            }
+            else {
+                icon_color = LIGHTGRAY;
+            }
+        }
+
+        p->icon_lock_index = p->visual_time_domain_lock;
+
+        float icon_size = 100.0F;
+        Rectangle dest{ lock_btn };
+        Rectangle source{ p->icon_lock_index * icon_size, 0, icon_size, icon_size };
+        DrawTexturePro(LOCK_TEX, source, dest, { 0,0 }, 0, Fade(icon_color, 1.0F * alpha_coef));
+    }
+
+    if (IsKeyPressed(KEY_L) && time_down <= 0.0F) {
+        p->visual_time_domain_lock = !p->visual_time_domain_lock;
+        time_down = 0.1F;
+    }
+
+    if (time_down > 0.0F) time_down -= dt;
 }
 
 void DrawVisualModeButton(Rectangle& panel_main, float dt)
@@ -2957,7 +3135,6 @@ void DrawVisualModeButton(Rectangle& panel_main, float dt)
 void DrawFullscreenButton(Rectangle& panel_main, float dt)
 {
 
-
     float fullscreen_hover_size = panel_main.height / 4;
     Rectangle fullscreen_btn_area_hover{
         panel_main.x + panel_main.width - (fullscreen_hover_size + 10), // add 10 to make space to border, to minimize mouse_stuck.
@@ -2965,8 +3142,8 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
         fullscreen_hover_size,
         fullscreen_hover_size
     };
-    static float alpha_coef{};
 
+    static float alpha_coef{};
     if (CheckCollisionPointRec(mouse_position, fullscreen_btn_area_hover)) {
         if (alpha_coef <= 1.0F) {
             alpha_coef += sqrtf(dt);
@@ -2980,9 +3157,9 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
 
     bool draw_icon = alpha_coef > 0.0F;
     static float time_down{};
-    bool fullscreen_btn_clicked{ false };
 
     if (draw_icon) {
+        p->mouse_onscreen_timer = HUD_TIMER_SECS;
         float fullscreen_btn_size = 50.0F;
         float space = 5.0F;
         Rectangle fullscreen_panel{
@@ -3001,7 +3178,6 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
         DrawRectangleRounded(fullscreen_btn, 0.25F, 10, Fade(LIGHTGRAY, 0.20F * alpha_coef));
 
         Color icon_color{};
-        //static float time_down{};
         if (p->fullscreen == OFF) {
             if (CheckCollisionPointRec(mouse_position, fullscreen_btn)) {
                 p->icon_fullscreen_index = 1;
@@ -3013,7 +3189,6 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
                 if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && (time_down <= 0.0F)) {
                     p->fullscreen = ON;
                     time_down = 0.1F;
-                    //fullscreen_btn_clicked = true;
                 }
             }
             else {
@@ -3032,7 +3207,6 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
                 if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && (time_down <= 0.0F)) {
                     p->fullscreen = OFF;
                     time_down = 0.1F;
-                    //fullscreen_btn_clicked = true;
                 }
             }
             else {
@@ -3041,7 +3215,6 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
             }
         }
 
-        //if (time_down > 0.0F) time_down -= dt;
 
         float icon_size = 100.0F;
         Rectangle dest{ fullscreen_btn };
@@ -3098,6 +3271,7 @@ void DrawMusicPlayModeButton(Rectangle& panel_main, float dt)
     bool draw_icon = alpha_coef > 0.0F;
 
     if (draw_icon) {
+        p->mouse_onscreen_timer = HUD_TIMER_SECS;
         float play_mode_btn_size = 50.0F;
         float space = 5.0F;
 
@@ -3144,10 +3318,10 @@ void DrawMusicProgress(Rectangle& panel_progress, float& music_volume)
     panel_progress = panel_progress;
     //DrawRectangleRec(panel_progress, PANEL_PROGRESS_BASE_COLOR);
 
-    float progress_ratio = static_cast<float>(panel_progress.width) / duration;
+    float progress_ratio = static_cast<float>(panel_progress.width) / music_duration;
     static float progress_w = 0;
     if (p->dragging != DRAG_MUSIC_PROGRESS) {
-        progress_w = progress_ratio * music_time;
+        progress_w = progress_ratio * music_time_now;
     }
 
     Rectangle progress_bar{
@@ -3158,15 +3332,19 @@ void DrawMusicProgress(Rectangle& panel_progress, float& music_volume)
     };
     Color progress_color_hover = PANEL_PROGRESS_COLOR;
 
-    if (p->fullscreen && p->mouse_onscreen == OFF) DrawRectangleRec(progress_bar, progress_color_hover);
-    else DrawProgressTimeDomain(panel_progress, progress_w);
+    // DRAW TIME DOMAIN VISUAL OR DRAW TIME BAR ONLY
+    if (p->fullscreen) {
+        if (p->mouse_onscreen == OFF && p->visual_time_domain_lock == OFF) DrawRectangleRec(progress_bar, progress_color_hover);
+        else DrawVisualTimeDomainProgress(panel_progress, progress_w);
+    }
+    else DrawVisualTimeDomainProgress(panel_progress, progress_w);
 
     if (p->dragging != DRAG_VOLUME) {
         if (CheckCollisionPointRec(mouse_position, panel_progress)) {
 
             if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 float t = (mouse_position.x - panel_progress.x) / panel_progress.width;
-                SeekMusicStream(music, (t * duration / 1000));
+                SeekMusicStream(music, (t * music_duration / 1000));
             }
 
             else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
@@ -3180,15 +3358,15 @@ void DrawMusicProgress(Rectangle& panel_progress, float& music_volume)
         music_volume = 0.0F;
         progress_w = mouse_position.x - panel_progress.x;
 
-        music_time = static_cast<int>(progress_w / progress_ratio);
+        music_time_now = static_cast<int>(progress_w / progress_ratio);
 
-        if (music_time < 0) {
-            music_time = 1;
+        if (music_time_now < 0) {
+            music_time_now = 1;
             progress_w = 0;
         }
-        else if (music_time > duration) {
-            music_time = duration;
-            progress_w = progress_ratio * music_time;
+        else if (music_time_now > music_duration) {
+            music_time_now = music_duration;
+            progress_w = progress_ratio * music_time_now;
         }
     }
     else if (p->dragging == DRAG_MUSIC_PROGRESS && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
@@ -3202,7 +3380,7 @@ void DrawMusicProgress(Rectangle& panel_progress, float& music_volume)
         else if (mouse_position.x - panel_progress.x > panel_progress.width) {
             t = 0.999F;
         }
-        SeekMusicStream(music, (t * duration / 1000));
+        SeekMusicStream(music, (t * music_duration / 1000));
     }
 
 }
@@ -3333,24 +3511,24 @@ void DrawDuration(Rectangle& panel_duration)
     formatted_duration.str("");
     formatted_progress.str("");
 
-    if (duration < 3600 * 1000) {
-        int minutes_dur = duration / (60 * 1000);
-        int seconds_dur = (duration / 1000) % 60;
+    if (music_duration < 3600 * 1000) {
+        int minutes_dur = music_duration / (60 * 1000);
+        int seconds_dur = (music_duration / 1000) % 60;
 
-        int minutes_pro = music_time / (60 * 1000);
-        int seconds_pro = (music_time / 1000) % 60;
+        int minutes_pro = music_time_now / (60 * 1000);
+        int seconds_pro = (music_time_now / 1000) % 60;
 
         formatted_duration << std::setw(2) << std::setfill('0') << minutes_dur << ":" << std::setw(2) << std::setfill('0') << seconds_dur;
         formatted_progress << std::setw(2) << std::setfill('0') << minutes_pro << ":" << std::setw(2) << std::setfill('0') << seconds_pro;
     }
     else {
-        int hour_dur = duration / (3600 * 1000);
-        int minutes_dur = (duration / (60 * 1000)) % 60;
-        int seconds_dur = (duration / 1000) % 60;
+        int hour_dur = music_duration / (3600 * 1000);
+        int minutes_dur = (music_duration / (60 * 1000)) % 60;
+        int seconds_dur = (music_duration / 1000) % 60;
 
-        int hour_pro = music_time / (3600 * 1000);
-        int minutes_pro = (music_time / (60 * 1000)) % 60;
-        int seconds_pro = (music_time / 1000) % 60;
+        int hour_pro = music_time_now / (3600 * 1000);
+        int minutes_pro = (music_time_now / (60 * 1000)) % 60;
+        int seconds_pro = (music_time_now / 1000) % 60;
 
         formatted_duration << std::setw(2) << std::setfill('0') << hour_dur << ":"
             << std::setw(2) << std::setfill('0') << minutes_dur << ":"
