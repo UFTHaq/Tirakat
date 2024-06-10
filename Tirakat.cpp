@@ -87,6 +87,8 @@
 // 3. Convert Image to Spectrogram, Spectrogram to audio? then i can see in my tirakat spectrogram mode.
 // 
 
+// buat sanbox untuk mengubah image ke grayscale. input dengan drag and drop, masukkan kiri panel, lalu sebelah kanan hasil grayscale, dan bisa disave. buat dengan texture.
+
 #include <iostream>
 #include <filesystem>
 #include <memory>
@@ -99,6 +101,7 @@
 #include <cassert>
 #include <algorithm>
 #include <iomanip>
+#include <cmath>
 
 #include <chrono>
 #include <thread>
@@ -108,14 +111,14 @@
 #include <fftw3.h>
 #include <SFML/Audio.hpp>
 
-#define FONT_LOC_Roboto_Slab {"resources/Fonts/Roboto_Slab/static/RobotoSlab-Regular.ttf"}
-#define FONT_LOC_Roboto_Mono {"resources/Fonts/Roboto_Mono/static/RobotoMono-SemiBold.ttf"}
-#define FONT_LOC_Source_Sans_BOLD {"resources/Fonts/Source_Sans_3/static/SourceSans3-Bold.ttf"}
-#define FONT_LOC_Source_Sans_SEMIBOLD {"resources/Fonts/Source_Sans_3/static/SourceSans3-SemiBold.ttf"}
-#define FONT_LOC_Source_Sans_REG {"resources/Fonts/Source_Sans_3/static/SourceSans3-Regular.ttf"}
-#define FONT_LOC_Sofia_Sans_Condensed_BOLD {"resources/Fonts/Sofia_Sans_Condensed/static/SofiaSansCondensed-Bold.ttf"}
-//#define FONT_LOC_Sofia_Sans_Condensed_REG {"resources/Fonts/Sofia_Sans_Condensed/static/SofiaSansCondensed-Regular.ttf"}
-#define FONT_LOC_Sofia_Sans_Condensed_REG {"resources/Fonts/Sofia_Sans_Condensed/static/SofiaSansCondensed-Medium.ttf"}
+#define FONT_LOC_Roboto_Slab                    {"resources/Fonts/Roboto_Slab/static/RobotoSlab-Regular.ttf"}
+#define FONT_LOC_Roboto_Mono                    {"resources/Fonts/Roboto_Mono/static/RobotoMono-SemiBold.ttf"}
+#define FONT_LOC_Source_Sans_BOLD               {"resources/Fonts/Source_Sans_3/static/SourceSans3-Bold.ttf"}
+#define FONT_LOC_Source_Sans_SEMIBOLD           {"resources/Fonts/Source_Sans_3/static/SourceSans3-SemiBold.ttf"}
+#define FONT_LOC_Source_Sans_REG                {"resources/Fonts/Source_Sans_3/static/SourceSans3-Regular.ttf"}
+#define FONT_LOC_Sofia_Sans_Condensed_BOLD      {"resources/Fonts/Sofia_Sans_Condensed/static/SofiaSansCondensed-Bold.ttf"}
+//#define FONT_LOC_Sofia_Sans_Condensed_REG       {"resources/Fonts/Sofia_Sans_Condensed/static/SofiaSansCondensed-Regular.ttf"}
+#define FONT_LOC_Sofia_Sans_Condensed_REG       {"resources/Fonts/Sofia_Sans_Condensed/static/SofiaSansCondensed-Medium.ttf"}
 
 #define ICON_APP_LOC        {"resources/Icons/Tirakat-V4.png"}
 #define ICON_PLAYPAUSE_LOC  {"resources/Icons/PlayPause.png"}
@@ -128,16 +131,16 @@
 #define ICON_POINTER_LOC    {"resources/Icons/Pointer.png"}
 #define ICON_LOCK_LOC       {"resources/Icons/Lock.png"}
 
-#define HUD_TIMER_SECS 1.5F
-#define PANEL_LEFT_WIDTH 275.0F
-#define PANEL_DURATION_HEIGHT 40.0F
-#define PANEL_DURATION_WIDTH PANEL_LEFT_WIDTH
-#define PANEL_BOTTOM 50.0F
-#define PANEL_MEDIA_HEIGHT PANEL_BOTTOM
-#define PANEL_MEIDA_WIDTH PANEL_LEFT_WIDTH
-#define PANEL_PROGRESS_HEIGHT PANEL_BOTTOM
-#define PANEL_PROGRESS_HEIGHT_FULLSCREEN_OFFSCREEN 5.0F
-#define PANEL_LINE_THICK 4.0F // 4.0F
+#define HUD_TIMER_SECS                              1.5F
+#define PANEL_LEFT_WIDTH                            275.0F
+#define PANEL_DURATION_HEIGHT                       40.0F
+#define PANEL_DURATION_WIDTH                        PANEL_LEFT_WIDTH
+#define PANEL_BOTTOM                                50.0F
+#define PANEL_MEDIA_HEIGHT                          PANEL_BOTTOM
+#define PANEL_MEIDA_WIDTH                           PANEL_LEFT_WIDTH
+#define PANEL_PROGRESS_HEIGHT                       PANEL_BOTTOM
+#define PANEL_PROGRESS_HEIGHT_FULLSCREEN_OFFSCREEN  5.0F
+#define PANEL_LINE_THICK                            4.0F // 4.0F
 
 #define BASE_COLOR                  Color{  20,  20,  20, 255 }
 #define PANEL_COLOR                 Color{  30,  30,  30, 255 }
@@ -158,11 +161,15 @@
 #define POPUP_CANCEL_COLOR          Color{ 142, 149, 178, 255 }
 #define TARGET_DONE_COLOR           Color{  80, 180, 120, 255 }
 
-#define KEY_TOGGLE_PLAY         KEY_SPACE
-#define KEY_TOGGLE_MUTE         KEY_M
-#define KEY_FULLSCREEN          KEY_F
-#define KEY_VISUAL_MODE         KEY_V 
-#define KEY_LOCK_TIME_DOMAIN    KEY_L
+#define KEY_TOGGLE_PLAY             KEY_SPACE
+#define KEY_TOGGLE_MUTE             KEY_M
+#define KEY_FULLSCREEN              KEY_F
+#define KEY_VISUAL_MODE             KEY_V 
+#define KEY_LOCK_TIME_DOMAIN        KEY_L
+
+#define MIN_FREQ                    10.0F 
+#define MAX_FREQ                    24000.0F
+#define MAX_GRADIENT_COLORS         5
 
 enum Page {
     PAGE_DRAG_DROP,
@@ -192,7 +199,7 @@ enum VisualModes {
     CLASSIC,
     GALAXY,
     LANDSCAPE,
-    SPECTOGRAM
+    SPECTROGRAM
 };
 
 struct VisualMode {
@@ -201,10 +208,10 @@ struct VisualMode {
     bool enable{};
 };
 
-VisualMode visualM1{ "Classic", "V + 1", ON };
-VisualMode visualM2{ "Galaxy", "V + 2", ON };
-VisualMode visualM3{ "Landscape", "V + 3", ON };
-VisualMode visualM4{ "Spectogram", "V + 4", OFF };
+VisualMode visualM1{ "Classic"      , "V + 1", ON };
+VisualMode visualM2{ "Galaxy"       , "V + 2", ON };
+VisualMode visualM3{ "Landscape"    , "V + 3", ON };
+VisualMode visualM4{ "Spectogram"   , "V + 4", ON };
 
 struct Notification {
     std::string g_info{};
@@ -225,7 +232,7 @@ struct Plug {
     bool popup_on = false;
     std::string popup_title{};
     bool mouse_onscreen{ true };
-    bool repeat{ OFF };
+    bool repeat{ ON };
     int mouse_cursor{};
     bool glow{ false };
     int mode{ MODE_NATURAL };
@@ -236,11 +243,16 @@ struct Plug {
     size_t option_music_order{};
     bool visual_mode_expand{ OFF };
     std::vector<VisualMode> visualmode{visualM1, visualM2, visualM3, visualM4};
-    size_t visual_mode_active{ 2 };
+    size_t visual_mode_active{ SPECTROGRAM };
     Notification notification{};
     float mouse_onscreen_timer{ HUD_TIMER_SECS };
     bool visual_time_domain_lock{ ON };
     size_t icon_lock_index{};
+    const int spectrogram_h{ (1 << 9) };
+    //const int spectrogram_w{ (1 << 9) * 16 / 9 };
+    const int spectrogram_w{ 600 };
+    Image spectrogram_image{};
+    Texture2D SPECTROGRAM_TEXTURE{};
 };
 
 Plug tirakat{};
@@ -330,6 +342,58 @@ void dc_offset(fftw_complex in[]) {
     }
 }
 
+// Low-pass filter (simple moving average filter)
+void low_pass_filter(fftw_complex in[], size_t n) {
+    std::vector<double> filtered(n, 0.0);
+
+    int window_size = 5; // Adjust as needed
+
+    for (size_t i = 0; i < n; i++) {
+        for (int j = 0; j < window_size && i >= j; j++) {
+            filtered[i] += in[i - j][0]; // Directly access the real part
+        }
+        filtered[i] /= window_size;
+    }
+
+    for (size_t i = 0; i < n; i++) {
+        in[i][0] = filtered[i]; // Update the real part
+    }
+}
+
+// Basic FIR Low-Pass Filter
+void fir_low_pass_filter(fftw_complex in[], size_t n, double cutoff) {
+    // Define filter coefficients for a basic FIR filter
+    // Here, we create a simple low-pass filter using sinc function
+    const int filter_size = 21; // Number of filter coefficients
+    std::vector<double> h(filter_size);
+    double fc = cutoff / (0.5 * N); // Normalize cutoff frequency by Nyquist frequency
+
+    for (int i = 0; i < filter_size; i++) {
+        if (i == (filter_size - 1) / 2) {
+            h[i] = 2.0 * fc;
+        }
+        else {
+            h[i] = sin(2.0 * PI * fc * (i - (filter_size - 1) / 2)) / (PI * (i - (filter_size - 1) / 2));
+            // Apply Hamming window
+            h[i] *= 0.54 - 0.46 * cos(2.0 * PI * i / (filter_size - 1));
+        }
+    }
+
+    std::vector<double> filtered(n, 0.0);
+
+    for (size_t i = 0; i < n; i++) {
+        for (int j = 0; j < filter_size; j++) {
+            if (i >= j) {
+                filtered[i] += h[j] * in[i - j][0]; // Apply filter to the real part
+            }
+        }
+    }
+
+    for (size_t i = 0; i < n; i++) {
+        in[i][0] = filtered[i]; // Update the real part
+    }
+}
+
 void hann_window(fftw_complex in[], size_t n) {
     for (size_t i = 0; i < n; i++) {
         float w = 0.5F * (1.0F - cosf(2.0F * PI * i / (n - 1)));
@@ -342,6 +406,7 @@ void fft_calculation(fftw_complex in[], fftw_complex out[], size_t n) {
 
     fftw_plan plan{};
     plan = fftw_plan_dft_1d(static_cast<int>(n), in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+    //plan = fftw_plan_dft_1d(static_cast<int>(n), in, out, FFTW_FORWARD, FFTW_PRESERVE_INPUT);
 
     fftw_execute(plan);
 
@@ -382,8 +447,8 @@ float calculateMovingAverage(std::array<float, SMOOTHING_BUFFER_SIZE>& arr, int 
     return sum / size;
 }
 
-float min_frequency = 10.0F;
-float max_frequency = 24000.0F;
+float min_frequency = MIN_FREQ;
+float max_frequency = MAX_FREQ;
 float bin_width = (max_frequency - min_frequency) / BUCKETS;
 
 float log_f_min = std::log10(min_frequency);
@@ -409,6 +474,131 @@ float millisecondsToSeconds(int milliseconds) {
     return static_cast<float>(milliseconds) / 1000;
 }
 
+void Tooltip(const Rectangle& boundary, const Font& font, const ScreenSize& screen, const std::string& information) {
+    float rect_h{ 35.0F };
+    float rect_w{};
+    float font_size = rect_h * 0.8F;
+    float font_space = 0.5F;
+    float space = 10;
+    Vector2 text_measure = MeasureTextEx(font, information.c_str(), font_size, font_space);
+    rect_w = text_measure.x + (space * 3.F);
+    float center = boundary.x + boundary.width / 2;
+
+    Rectangle tip_panel{
+        0,
+        boundary.y - space - rect_h,
+        rect_w,
+        rect_h
+    };
+
+    tip_panel.x = center - (tip_panel.width / 2);
+
+    if (tip_panel.x < space) tip_panel.x = space;
+    else if (tip_panel.x + tip_panel.width > screen.w) {
+        tip_panel.x = screen.w - (tip_panel.width + space);
+    }
+    else if (tip_panel.y < space) tip_panel.y = boundary.y + boundary.height + space;
+
+    Vector2 text_coor{
+        tip_panel.x + (tip_panel.width - text_measure.x) / 2,
+        tip_panel.y + (tip_panel.height - text_measure.y) / 2,
+    };
+
+    Color color = { 20, 20, 20, 240 };
+    DrawRectangleRounded(tip_panel, 0.25F, 10, color);
+    DrawTextEx(font, information.c_str(), text_coor, font_size, font_space, RAYWHITE);
+
+}
+
+void NotificationTool(const Rectangle& base_boundary, const Font& font, const std::string& info, float& info_timer, float dt) {
+    float rect_h{ 40.0F };
+    float rect_w{};
+    float font_size{ rect_h * 0.8F };
+    float font_space{ 0.5F };
+    float space{ 10 };
+    Vector2 text_measure = MeasureTextEx(font, info.c_str(), font_size, font_space);
+    float center = base_boundary.x + base_boundary.width / 2;
+    rect_w = text_measure.x + (space * 3.F);
+
+    Rectangle notification_panel{
+        0,
+        base_boundary.y + 100,
+        rect_w,
+        rect_h
+    };
+
+    notification_panel.x = center - (notification_panel.width / 2);
+    Vector2 text_coor{
+        notification_panel.x + (notification_panel.width - text_measure.x) / 2,
+        notification_panel.y + (notification_panel.height - text_measure.y) / 2,
+    };
+    Color color = { 50, 50, 50, 255 };
+
+    if (info_timer > 0) {
+        float alpha = 1.0F;
+        if (info_timer < 1) alpha = (info_timer * info_timer);
+        DrawRectangleRounded(notification_panel, 0.25F, 10, Fade(color, alpha * 0.9F));
+        DrawTextEx(font, info.c_str(), text_coor, font_size, font_space, Fade(RAYWHITE, alpha));
+    }
+
+    info_timer -= dt;
+}
+
+Color interpolateColor(float normalizedValue) {
+    Color startColor = { 30, 30, 40, 255 }; // Black
+    Color endColor = { 255, 235, 235, 255 }; // White
+
+    // Interpolate between the start and end color based on the normalized value
+    Color resultColor;
+    resultColor.r = static_cast<unsigned char>(startColor.r + normalizedValue * (endColor.r - startColor.r));
+    resultColor.g = static_cast<unsigned char>(startColor.g + normalizedValue * (endColor.g - startColor.g));
+    resultColor.b = static_cast<unsigned char>(startColor.b + normalizedValue * (endColor.b - startColor.b));
+    //resultColor.a = startColor.a + normalizedValue * (endColor.a - startColor.a);
+    resultColor.a = 100;
+
+    return resultColor;
+}
+
+// Define gradient colors
+Color gradientColors[MAX_GRADIENT_COLORS] = {
+    Color {0, 0, 255, 255},   // Blue
+    Color {0, 255, 255, 255}, // Cyan
+    Color {0, 255, 0, 255},   // Green
+    Color {255, 255, 0, 255}, // Yellow
+    Color {255, 0, 0, 255}    // Red
+};
+
+// Function to linearly interpolate between two colors
+Color ColorLerp(Color color1, Color color2, float amount) {
+    return Color {
+        (unsigned char)((color1.r * (1 - amount)) + (color2.r * amount)),
+        (unsigned char)((color1.g * (1 - amount)) + (color2.g * amount)),
+        (unsigned char)((color1.b * (1 - amount)) + (color2.b * amount)),
+        (unsigned char)((color1.a * (1 - amount)) + (color2.a * amount))
+    };
+}
+
+// Function to map a value between 0 and 1 to a color in the gradient
+Color getColorFromValue(float value) {
+    if (value <= 0) return gradientColors[0];
+    if (value >= 1) return gradientColors[MAX_GRADIENT_COLORS - 1];
+
+    int colorIndex = static_cast<int>(value) * (MAX_GRADIENT_COLORS - 1);
+    float colorPercentage = (value * (MAX_GRADIENT_COLORS - 1)) - colorIndex;
+
+    Color color1 = gradientColors[colorIndex];
+    Color color2 = gradientColors[colorIndex + 1];
+
+    return ColorLerp(color1, color2, colorPercentage);
+}
+
+
+Color getColorFromAmplitude(float normalizedAmplitude) {
+    // Map normalized amplitude to brightness (0 to 255)
+    unsigned char brightness = (unsigned char)(normalizedAmplitude * 255);
+
+    return Color { brightness, brightness, brightness, 255 }; // RGB components set to brightness
+}
 
 void InitFile(const std::filesystem::path& filename);
 
@@ -468,6 +658,10 @@ void DrawDragDropPage(ScreenSize screen);
 
 bool Check_StartUp_Page();
 
+void InitializedSpectrogram();
+//void InitializedSpectrogram(std::unique_ptr<Color[], std::default_delete<Color[]>>& spectrogram_data);
+
+
 static std::vector<float> ExtractMusicData(std::string& filename) {
     std::vector<float> audio_data{};
 
@@ -518,75 +712,7 @@ static std::vector<float> ExtractMusicData(std::string& filename) {
     // Jika input berupa file wav, perlu penguatan pada amplitude, sekitar 3 - 6 kali lipat.
 }
 
-void Tooltip(const Rectangle &boundary, const Font &font, const ScreenSize &screen, const std::string &information) {
-    float rect_h{ 35.0F };
-    float rect_w{};
-    float font_size = rect_h * 0.8F;
-    float font_space = 0.5F;
-    float space = 10;
-    Vector2 text_measure = MeasureTextEx(font, information.c_str(), font_size, font_space);
-    rect_w = text_measure.x + (space * 3.F);
-    float center = boundary.x + boundary.width / 2;
 
-    Rectangle tip_panel{ 
-        0, 
-        boundary.y - space - rect_h, 
-        rect_w, 
-        rect_h 
-    };
-
-    tip_panel.x = center - (tip_panel.width / 2);
-    
-    if (tip_panel.x < space) tip_panel.x = space;
-    else if (tip_panel.x + tip_panel.width > screen.w) {
-        tip_panel.x = screen.w - (tip_panel.width + space);
-    }
-    else if (tip_panel.y < space) tip_panel.y = boundary.y + boundary.height + space;
-
-    Vector2 text_coor{
-        tip_panel.x + (tip_panel.width - text_measure.x) / 2,
-        tip_panel.y + (tip_panel.height - text_measure.y) / 2,
-    };
-
-    Color color = { 20, 20, 20, 240 };
-    DrawRectangleRounded(tip_panel, 0.25F, 10, color);
-    DrawTextEx(font, information.c_str(), text_coor, font_size, font_space, RAYWHITE);
-
-}
-
-void NotificationTool(const Rectangle& base_boundary, const Font& font, const std::string& info, float& info_timer, float dt) {
-    float rect_h{ 40.0F };
-    float rect_w{};
-    float font_size{ rect_h * 0.8F };
-    float font_space{ 0.5F };
-    float space{ 10 };
-    Vector2 text_measure = MeasureTextEx(font, info.c_str(), font_size, font_space);
-    float center = base_boundary.x + base_boundary.width / 2;
-    rect_w = text_measure.x + (space * 3.F);
-
-    Rectangle notification_panel{
-        0,
-        base_boundary.y + 100,
-        rect_w,
-        rect_h
-    };
-
-    notification_panel.x = center - (notification_panel.width / 2);
-    Vector2 text_coor{
-        notification_panel.x + (notification_panel.width - text_measure.x) / 2,
-        notification_panel.y + (notification_panel.height - text_measure.y) / 2,
-    };
-    Color color = { 50, 50, 50, 255 };
-
-    if (info_timer > 0) {
-        float alpha = 1.0F;
-        if (info_timer < 1) alpha = (info_timer * info_timer);
-        DrawRectangleRounded(notification_panel, 0.25F, 10, Fade(color, alpha * 0.9F));
-        DrawTextEx(font, info.c_str(), text_coor, font_size, font_space, Fade(RAYWHITE, alpha));
-    }
-
-    info_timer -= dt;
-}
 
 Vector2 mouse_position{};
 std::vector<Data> data{};
@@ -646,6 +772,8 @@ std::deque<std::vector<Vector2>> landscape_splines{};
 ScreenSize screen{};
 
 float volume{};
+
+auto spectrogram_data = std::make_unique<Color[]>(p->spectrogram_w * p->spectrogram_h);
 
 int main()
 {
@@ -732,9 +860,13 @@ int main()
     LOCK_TEX = LoadTextureFromImage(lock_icon);
     SetTextureFilter(LOCK_TEX, TEXTURE_FILTER_BILINEAR);
 
-
     p->circle = LoadShader(NULL, "resources/shaders/circle.fs");
     p->bubble = LoadShader(NULL, "resources/shaders/bubble.fs");
+
+    //auto spectrogram_data = std::make_unique<Color[]>(p->spectrogram_w * p->spectrogram_h);
+    //InitializedSpectrogram(spectrogram_data);
+
+    InitializedSpectrogram();
 
     FileCheck(data_txt);
 
@@ -817,6 +949,33 @@ int main()
 
     return 0;
 }
+
+void InitializedSpectrogram()
+{
+    for (int i = 0; i < p->spectrogram_h; i++) {
+        for (int j = 0; j < p->spectrogram_w; j++) {
+            spectrogram_data[i * p->spectrogram_w + j] = Color{
+                static_cast<unsigned char>(j * 255 / p->spectrogram_w),
+                static_cast<unsigned char>(i * 255 / p->spectrogram_h),
+                static_cast<unsigned char>(i * 255 / p->spectrogram_h),
+                //255 // Full color initialized
+                0 // Full transparent
+            };
+        }
+    }
+
+    p->spectrogram_image = {
+        spectrogram_data.get(),
+        p->spectrogram_w,
+        p->spectrogram_h,
+        1,
+        PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
+    };
+
+    p->SPECTROGRAM_TEXTURE = LoadTextureFromImage(p->spectrogram_image);
+}
+
+
 
 bool Check_StartUp_Page()
 {
@@ -978,6 +1137,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         if (repetition_saved == false) {
 
             if (music_time_now >= (music_duration - 100)) {
+            //if (GetMusicTimePlayed(music) >= (millisecondsToSeconds(music_duration) - 0.05F)) {
 
                 if (time_played >= threshold_80) {
                     data.at(music_play).counter++;
@@ -2416,6 +2576,8 @@ void DrawMainDisplay(Rectangle& panel_main)
     if (p->music_playing) {
         dc_offset(in);
         hann_window(in, N);
+        //low_pass_filter(in, N);
+        //fir_low_pass_filter(in, N, 1000);
     }
     fft_calculation(in, out, N);
 
@@ -2808,6 +2970,89 @@ void DrawMainDisplay(Rectangle& panel_main)
         DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 3.5F, Fade(WHITE, 1.0F));
     }
 
+    if (p->visual_mode_active == SPECTROGRAM) {
+        float space_from_top = 80;
+        Rectangle spectrogram_base_panel{
+            panel_display.x,
+            panel_display.y + space_from_top,
+            panel_display.width,
+            panel_display.height - space_from_top
+        };
+
+        static float dest_w{};
+        static float dest_h{};
+        float pad = 20.0F;
+        if (spectrogram_base_panel.width < spectrogram_base_panel.height) {
+            dest_w = std::round(spectrogram_base_panel.width - (pad * 2));
+            dest_h = std::round(dest_w * (9 / 16.0F));
+
+        }
+        else {
+            dest_h = spectrogram_base_panel.height - (pad * 2);
+            dest_w = dest_h * (16.0F / 9);
+            if (dest_w > spectrogram_base_panel.width) {
+                dest_w = std::round(spectrogram_base_panel.width - (pad * 2));
+                dest_h = std::round(dest_w * (9 / 16.0F));
+            }
+        }
+
+        Rectangle dest{
+            spectrogram_base_panel.x + (spectrogram_base_panel.width - dest_w) / 2,
+            spectrogram_base_panel.y + (spectrogram_base_panel.height - dest_h) / 2,
+            dest_w,
+            dest_h
+        };
+        
+        Rectangle source{
+            0,
+            0,
+            static_cast<float>(p->spectrogram_w),
+            static_cast<float>(p->spectrogram_h)
+        };
+
+        static int time_skip = 0;
+        time_skip += (int)dt;
+        //if (time_skip % 40 == 0)
+        {
+            // 
+            float min_amp_spec = std::numeric_limits<float>::max();  // Or a very large positive value
+            float max_amp_spec = std::numeric_limits<float>::min();  // Or a very large negative value
+
+            for (int i = 0; i < p->spectrogram_h; i++) {
+                float real_num_spec = (float)out[i][0];
+                float imaginer_spec = (float)out[i][1];
+                float amplitude_spc = std::sqrt((real_num_spec * real_num_spec) + (imaginer_spec * imaginer_spec));
+                min_amp_spec = std::min(min_amp_spec, amplitude_spc);
+                max_amp_spec = std::max(max_amp_spec, amplitude_spc);
+            }
+
+            int speed = 1;
+            for (int y = 0; y < p->spectrogram_h; y++) {
+                std::memmove(&spectrogram_data[y * p->spectrogram_w], &spectrogram_data[y * p->spectrogram_w + speed], (p->spectrogram_w - speed) * sizeof(Color));
+
+                float real_num_spec = static_cast<float>(out[y][0]);
+                float imaginer_spec = static_cast<float>(out[y][1]);
+                float amplitude_spc = std::sqrt((real_num_spec * real_num_spec) + (imaginer_spec * imaginer_spec));
+
+
+                amplitude_spc = normalization(amplitude_spc, min_amp_spec, max_amp_spec);
+                if (amplitude_spc < 0.1F) amplitude_spc = 0.0F;
+                int inverse = p->spectrogram_h - y;
+                //spectrogram_data[y * p->spectrogram_w + (p->spectrogram_w - speed)] = interpolateColor(amplitude_spc); // Terbalik
+                spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = interpolateColor(amplitude_spc);
+                //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = ColorFromHSV((1 - amplitude_spc) * 180, 0.8F, 1);
+                //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromValue(amplitude_spc);
+                //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromAmplitude(amplitude_spc);
+                //spectrogram_data[y * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromAmplitude(amplitude_spc);
+            }
+        }
+
+        Color tint = WHITE;
+        UpdateTexture(p->SPECTROGRAM_TEXTURE, spectrogram_data.get());
+        DrawTexturePro(p->SPECTROGRAM_TEXTURE, source, dest, { 0,0 }, 0, tint);
+
+    }
+
     // PANEL LOCK VISUAL TIME DOMAIN
     DrawLockButton(panel_main, dt);
     
@@ -3124,8 +3369,8 @@ void DrawVisualModeButton(Rectangle& panel_main, float dt)
         }
     }
     else if (IsKeyDown(KEY_VISUAL_MODE) && IsKeyPressed(KEY_FOUR)) {
-        if (p->visualmode.at(SPECTOGRAM).enable == ON) {
-            p->visual_mode_active = SPECTOGRAM;
+        if (p->visualmode.at(SPECTROGRAM).enable == ON) {
+            p->visual_mode_active = SPECTROGRAM;
         }
     }
 
