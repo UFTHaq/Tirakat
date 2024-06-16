@@ -248,7 +248,7 @@ struct Plug {
     float mouse_onscreen_timer{ HUD_TIMER_SECS };
     bool visual_time_domain_lock{ ON };
     size_t icon_lock_index{};
-    const int spectrogram_h{ (1 << 9) };
+    const int spectrogram_h{ static_cast<int>((1 << 9)) };
     //const int spectrogram_w{ (1 << 9) * 16 / 9 };
     const int spectrogram_w{ 600 };
     Image spectrogram_image{};
@@ -286,8 +286,10 @@ struct Frame {
 };
 
 const int N{ 1 << 10 };
-fftw_complex* in = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
-fftw_complex* out = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
+//fftw_complex* fftw_in  = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
+//fftw_complex* fftw_out = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
+std::vector<fftw_complex> fftw_in(N);
+std::vector<fftw_complex> fftw_out(N);
 
 const int BUCKETS{ 1 << 6 };
 //const int BUCKETS{ 80 };
@@ -316,28 +318,29 @@ void callback(void* bufferData, unsigned int frames) {
         float left = fs[i].left;
         float right = fs[i].right;
 
-        in[i][0] = left;
-        in[i][1] = 0.0F;
+        fftw_in[i][0] = left;
+        fftw_in[i][1] = 0.0F;
     }
 }
 
+// Using std::vector, for now this not activated
 void cleanup() {
-    if (in != nullptr) {
-        fftw_free(in);
-    } 
-    if (out != nullptr) {
-        fftw_free(out);
-    }
+    //if (fftw_in != nullptr) {
+    //    fftw_free(fftw_in);
+    //} 
+    //if (fftw_out != nullptr) {
+    //    fftw_free(fftw_out);
+    //}
 }
 
 void dc_offset(fftw_complex in[]) {
     double dc_offset = 0.0F;
-    for (int i = 0; i < N; i++) {
+    for (size_t i = 0; i < N; i++) {
         dc_offset += in[i][0];
     }
     dc_offset = dc_offset / (float)N;
 
-    for (int i = 0; i < N; i++) {
+    for (size_t i = 0; i < N; i++) {
         in[i][0] -= dc_offset;
     }
 }
@@ -349,7 +352,7 @@ void low_pass_filter(fftw_complex in[], size_t n) {
     int window_size = 5; // Adjust as needed
 
     for (size_t i = 0; i < n; i++) {
-        for (int j = 0; j < window_size && i >= j; j++) {
+        for (size_t j = 0; j < window_size && i >= j; j++) {
             filtered[i] += in[i - j][0]; // Directly access the real part
         }
         filtered[i] /= window_size;
@@ -368,7 +371,7 @@ void fir_low_pass_filter(fftw_complex in[], size_t n, double cutoff) {
     std::vector<double> h(filter_size);
     double fc = cutoff / (0.5 * N); // Normalize cutoff frequency by Nyquist frequency
 
-    for (int i = 0; i < filter_size; i++) {
+    for (size_t i = 0; i < filter_size; i++) {
         if (i == (filter_size - 1) / 2) {
             h[i] = 2.0 * fc;
         }
@@ -382,7 +385,7 @@ void fir_low_pass_filter(fftw_complex in[], size_t n, double cutoff) {
     std::vector<double> filtered(n, 0.0);
 
     for (size_t i = 0; i < n; i++) {
-        for (int j = 0; j < filter_size; j++) {
+        for (size_t j = 0; j < filter_size; j++) {
             if (i >= j) {
                 filtered[i] += h[j] * in[i - j][0]; // Apply filter to the real part
             }
@@ -394,19 +397,35 @@ void fir_low_pass_filter(fftw_complex in[], size_t n, double cutoff) {
     }
 }
 
-void hann_window(fftw_complex in[], size_t n) {
-    for (size_t i = 0; i < n; i++) {
-        float w = 0.5F * (1.0F - cosf(2.0F * PI * i / (n - 1)));
+void hann_window(fftw_complex in[], size_t N) {
+    for (size_t i = 0; i < N; i++) {
+        float w = 0.5F * (1.0F - cosf(2.0F * PI * i / (N - 1)));
         in[i][0] *= w;
     }
 }
 
-void fft_calculation(fftw_complex in[], fftw_complex out[], size_t n) {
+void hamming_window(fftw_complex in[], size_t N) {
+    for (size_t i = 0; i < N; i++) {
+        float w = 0.54 - 0.46 * cos(2 * PI * i / (N - 1));
+        in[i][0] *= w;
+    }
+}
+
+void gaussian_window(fftw_complex in[], size_t N) {
+    float sigma = 0.5F;
+    float center = (N - 1) / 2.0f; // Center of the window
+    for (size_t i = 0; i < N; i++) {
+        float exponent = -0.5 * std::pow((i - center) / (sigma * center), 2);
+        float w = std::exp(exponent);
+        in[i][0] *= w;
+    }
+}
+
+void fftw_calculation(fftw_complex in[], fftw_complex out[], size_t n) {
     assert(n > 0);
 
     fftw_plan plan{};
     plan = fftw_plan_dft_1d(static_cast<int>(n), in, out, FFTW_FORWARD, FFTW_ESTIMATE);
-    //plan = fftw_plan_dft_1d(static_cast<int>(n), in, out, FFTW_FORWARD, FFTW_PRESERVE_INPUT);
 
     fftw_execute(plan);
 
@@ -457,7 +476,7 @@ float delta_log = (log_f_max - log_f_min) / BUCKETS;
 
 void make_bins() {
     std::cout << std::fixed << std::setprecision(2);
-    for (int i = 0; i <= BUCKETS; i++) {
+    for (size_t i = 0; i <= BUCKETS; i++) {
         Freq_Bin.at(i) = min_frequency + i * bin_width;
         //Freq_Bin.at(i) = std::powf(10, log_f_min + i * delta_log);
         std::cout << Freq_Bin[i] << std::endl;
@@ -545,8 +564,8 @@ void NotificationTool(const Rectangle& base_boundary, const Font& font, const st
 }
 
 Color interpolateColor(float normalizedValue) {
-    Color startColor = { 30, 30, 40, 255 }; // Black
-    Color endColor = { 255, 235, 235, 255 }; // White
+    Color startColor = { 20, 20, 30, 255 }; // Black
+    Color endColor = { 255, 245, 245, 255 }; // White
 
     // Interpolate between the start and end color based on the normalized value
     Color resultColor;
@@ -774,6 +793,9 @@ ScreenSize screen{};
 float volume{};
 
 auto spectrogram_data = std::make_unique<Color[]>(p->spectrogram_w * p->spectrogram_h);
+std::vector<Vector2> pointsArray_RealTime_smart(BUCKETS);
+std::vector<Vector2> pointsArray_Norm_smart(BUCKETS);
+std::vector<Vector2> splines_pointer_smart(BUCKETS);
 
 int main()
 {
@@ -952,8 +974,8 @@ int main()
 
 void InitializedSpectrogram()
 {
-    for (int i = 0; i < p->spectrogram_h; i++) {
-        for (int j = 0; j < p->spectrogram_w; j++) {
+    for (size_t i = 0; i < p->spectrogram_h; i++) {
+        for (size_t j = 0; j < p->spectrogram_w; j++) {
             spectrogram_data[i * p->spectrogram_w + j] = Color{
                 static_cast<unsigned char>(j * 255 / p->spectrogram_w),
                 static_cast<unsigned char>(i * 255 / p->spectrogram_h),
@@ -1749,7 +1771,7 @@ void DrawVisualTimeDomainProgress(Rectangle& panel, float progress_w)
         float x2 = panel.x + i * segments;
         float y2 = center - (-time_domain_signal.at(i)) * panel.height * 0.5F;
     
-        if (x1 < progress) { 
+        if (x1 <= progress) { 
             //color = SKYBLUE;
             color = { 225, 225, 225, 255 };
             alpha = 1.0F;
@@ -2574,22 +2596,24 @@ void DrawMainDisplay(Rectangle& panel_main)
     }
 
     if (p->music_playing) {
-        dc_offset(in);
-        hann_window(in, N);
+        //dc_offset(fftw_in.data());
+        //hann_window(fftw_in.data(), N);
+        hamming_window(fftw_in.data(), N);
+        //gaussian_window(fftw_in.data(), N);
         //low_pass_filter(in, N);
         //fir_low_pass_filter(in, N, 1000);
     }
-    fft_calculation(in, out, N);
+    fftw_calculation(fftw_in.data(), fftw_out.data(), N);
 
-    for (int i = 0; i < BUCKETS; i++) {
+    for (size_t i = 0; i < BUCKETS; i++) {
         Spectrum.at(i) = 0.0F;
     }
 
     float min_amp = std::numeric_limits<float>::max();  // Or a very large positive value
     float max_amp = std::numeric_limits<float>::min();  // Or a very large negative value
-    for (int i = 0; i < N / 2; i++) {
-        float real_num = (float)out[i][0];
-        float imaginer = (float)out[i][1];
+    for (size_t i = 0; i < N / 2; i++) {
+        float real_num = (float)fftw_out[i][0];
+        float imaginer = (float)fftw_out[i][1];
 
         float amplitude = std::sqrt((real_num * real_num) + (imaginer * imaginer));
 
@@ -2597,13 +2621,13 @@ void DrawMainDisplay(Rectangle& panel_main)
         max_amp = std::max(max_amp, amplitude);
     }
 
-    for (int i = 0; i < N / 2; i++) {
-        float real_num = (float)out[i][0];
-        float imaginer = (float)out[i][1];
+    for (size_t i = 0; i < N / 2; i++) {
+        float real_num = (float)fftw_out[i][0];
+        float imaginer = (float)fftw_out[i][1];
 
         float amplitude = std::sqrt((real_num * real_num) + (imaginer * imaginer));
 
-        for (int j = 0; j < BUCKETS; j++) {
+        for (size_t j = 0; j < BUCKETS; j++) {
             float freq = min_frequency + i * bin_width;
             //float freq = i * 48000/N;
             //float freq = std::powf(10, log_f_min + i * delta_log);
@@ -2624,8 +2648,8 @@ void DrawMainDisplay(Rectangle& panel_main)
 
     float dt = GetFrameTime();
     
-    for (int i = 0; i < BUCKETS; i++) {
-        for (int j = SMOOTHING_BUFFER_SIZE - 1; j > 0; --j) {
+    for (size_t i = 0; i < BUCKETS; i++) {
+        for (size_t j = SMOOTHING_BUFFER_SIZE - 1; j > 0; --j) {
             prevAmplitude.at(i).at(j) = prevAmplitude.at(i).at(j - 1);
         }
 
@@ -2638,10 +2662,10 @@ void DrawMainDisplay(Rectangle& panel_main)
         maxAmplitude = std::max(maxAmplitude, smoothedAmplitude.at(i));
     }
     // SPLINE INITIALIZATION
-    std::unique_ptr<Vector2[]> pointsArray_RealTime_smart(new Vector2[BUCKETS]);
-    std::unique_ptr<Vector2[]> pointsArray_Norm_smart(new Vector2[BUCKETS]);
+    /*std::unique_ptr<Vector2[]> pointsArray_RealTime_smart(new Vector2[BUCKETS]);
+    std::unique_ptr<Vector2[]> pointsArray_Norm_smart(new Vector2[BUCKETS]);*/
 
-    for (int i = 0; i < BUCKETS; i++) {
+    for (size_t i = 0; i < BUCKETS; i++) {
         float final_amplitude = smoothedAmplitude.at(i);
 
         switch (p->mode)
@@ -2667,7 +2691,7 @@ void DrawMainDisplay(Rectangle& panel_main)
     }
 
     // JUST FOR DRAWING
-    for (int i = 0; i < BUCKETS; i++) {
+    for (size_t i = 0; i < BUCKETS; i++) {
         float final_amplitude = smoothedAmplitude.at(i);
         Vector2 coor = { normalization(float(i), 0.0F, (BUCKETS - 1)), (1 - final_amplitude * 0.7F) };
         pointsArray_Norm_smart[i] = coor;
@@ -2897,7 +2921,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         float coef_rect = 0.96F;
         std::deque<Rectangle> landscape_rects{};
 
-        for (int i = 0; i < JUMLAH_RECT; i++) {
+        for (size_t i = 0; i < JUMLAH_RECT; i++) {
             Rectangle edited = {
                 base.x + ((base.width - base.width * coef_rect) / 2),
                 base.y + base.height * 0.025F * coef_rect,
@@ -2917,7 +2941,7 @@ void DrawMainDisplay(Rectangle& panel_main)
             //DrawRectangleLinesEx(edited, 1.0F, RED);
         }
 
-        std::unique_ptr<Vector2[]> spline_pointer_smart(new Vector2[BUCKETS]);
+        //std::unique_ptr<Vector2[]> spline_pointer_smart(new Vector2[BUCKETS]);
 
         static float time_check{};
         time_check += dt;
@@ -2926,7 +2950,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         if (time_check >= time_to_capture) {
 
             std::vector<Vector2> points{};
-            for (int i = 0; i < BUCKETS; i++) {
+            for (size_t i = 0; i < BUCKETS; i++) {
                 points.push_back(pointsArray_Norm_smart[i]);
             }
 
@@ -2939,23 +2963,23 @@ void DrawMainDisplay(Rectangle& panel_main)
         }
 
         float thick = 1.0F;
-        for (int i = 0; i < landscape_splines.size(); i++) {
+        for (size_t i = 0; i < landscape_splines.size(); i++) {
             Rectangle rect = landscape_rects.at(i);
 
-            for (int j = 0; j < BUCKETS; j++) {
-                spline_pointer_smart[j] = {
+            for (size_t j = 0; j < BUCKETS; j++) {
+                splines_pointer_smart.at(j) = {
                     rect.x + rect.width * landscape_splines.at(i)[j].x,
                     rect.y + rect.height * landscape_splines.at(i)[j].y
                 };
             }
-            DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 6.0F * thick, Fade(SKYBLUE, thick / 4));
-            DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 1.5F * thick, LIGHTGRAY);
+            DrawSplineLinear(splines_pointer_smart.data(), BUCKETS, 1.5F * thick, LIGHTGRAY);
+            DrawSplineLinear(splines_pointer_smart.data(), BUCKETS, 6.0F * thick, Fade(SKYBLUE, thick / 4));
 
             // Inverse
-            //DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 4.0F * (1-thick), Fade(SKYBLUE, (1 - thick) / 4));
-            //DrawSplineLinear(spline_pointer_smart.get(), BUCKETS, 2.F * (1 - thick), LIGHTGRAY);
+            //DrawSplineLinear(spline_pointer_smart.data(), BUCKETS, 4.0F * (1-thick), Fade(SKYBLUE, (1 - thick) / 4));
+            //DrawSplineLinear(spline_pointer_smart.data(), BUCKETS, 2.F * (1 - thick), LIGHTGRAY);
 
-            //DrawSplineBasis(spline_pointer_smart.get(), BUCKETS, thick, LIGHTGRAY);
+            //DrawSplineBasis(spline_pointer_smart.data(), BUCKETS, thick, LIGHTGRAY);
             //DrawRectangleLinesEx(rect, .4F, BLUE);
 
             thick *= 0.97F;
@@ -2963,11 +2987,11 @@ void DrawMainDisplay(Rectangle& panel_main)
 
         Color color = BLUE;
 
-        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 15.0F, Fade(color, 0.1F));
-        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 13.0F, Fade(color, 0.15F));
-        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 9.0F, Fade(color, 0.2F));
-        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 7.0F, Fade(color, 0.25F));
-        DrawSplineCatmullRom(pointsArray_RealTime_smart.get(), BUCKETS, 3.5F, Fade(WHITE, 1.0F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.data(), BUCKETS, 15.0F, Fade(color, 0.1F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.data(), BUCKETS, 13.0F, Fade(color, 0.15F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.data(), BUCKETS, 9.0F, Fade(color, 0.2F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.data(), BUCKETS, 7.0F, Fade(color, 0.25F));
+        DrawSplineCatmullRom(pointsArray_RealTime_smart.data(), BUCKETS, 3.5F, Fade(WHITE, 1.0F));
     }
 
     if (p->visual_mode_active == SPECTROGRAM) {
@@ -3018,33 +3042,39 @@ void DrawMainDisplay(Rectangle& panel_main)
             float min_amp_spec = std::numeric_limits<float>::max();  // Or a very large positive value
             float max_amp_spec = std::numeric_limits<float>::min();  // Or a very large negative value
 
-            for (int i = 0; i < p->spectrogram_h; i++) {
-                float real_num_spec = (float)out[i][0];
-                float imaginer_spec = (float)out[i][1];
+            for (size_t i = 0; i < p->spectrogram_h; i++) {
+                float real_num_spec = static_cast<float>(fftw_out[i][0]);
+                float imaginer_spec = static_cast<float>(fftw_out[i][1]);
                 float amplitude_spc = std::sqrt((real_num_spec * real_num_spec) + (imaginer_spec * imaginer_spec));
                 min_amp_spec = std::min(min_amp_spec, amplitude_spc);
                 max_amp_spec = std::max(max_amp_spec, amplitude_spc);
             }
 
             int speed = 1;
-            for (int y = 0; y < p->spectrogram_h; y++) {
-                std::memmove(&spectrogram_data[y * p->spectrogram_w], &spectrogram_data[y * p->spectrogram_w + speed], (p->spectrogram_w - speed) * sizeof(Color));
 
-                float real_num_spec = static_cast<float>(out[y][0]);
-                float imaginer_spec = static_cast<float>(out[y][1]);
-                float amplitude_spc = std::sqrt((real_num_spec * real_num_spec) + (imaginer_spec * imaginer_spec));
+            if (p->music_playing) {
+
+                for (size_t y = 0; y < p->spectrogram_h; y++) {
+                    std::memmove(&spectrogram_data[y * p->spectrogram_w], &spectrogram_data[y * p->spectrogram_w + speed], (p->spectrogram_w - speed) * sizeof(Color));
+
+                    float real_num_spec = static_cast<float>(fftw_out[y][0]);
+                    float imaginer_spec = static_cast<float>(fftw_out[y][1]);
+                    float amplitude_spc = std::sqrt((real_num_spec * real_num_spec) + (imaginer_spec * imaginer_spec));
 
 
-                amplitude_spc = normalization(amplitude_spc, min_amp_spec, max_amp_spec);
-                if (amplitude_spc < 0.1F) amplitude_spc = 0.0F;
-                int inverse = p->spectrogram_h - y;
-                //spectrogram_data[y * p->spectrogram_w + (p->spectrogram_w - speed)] = interpolateColor(amplitude_spc); // Terbalik
-                spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = interpolateColor(amplitude_spc);
-                //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = ColorFromHSV((1 - amplitude_spc) * 180, 0.8F, 1);
-                //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromValue(amplitude_spc);
-                //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromAmplitude(amplitude_spc);
-                //spectrogram_data[y * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromAmplitude(amplitude_spc);
+                    amplitude_spc = normalization(amplitude_spc, min_amp_spec, max_amp_spec);
+                    if (amplitude_spc < 0.1F) amplitude_spc = 0.0F;
+                    int inverse = p->spectrogram_h - y;
+                    //spectrogram_data[y * p->spectrogram_w + (p->spectrogram_w - speed)] = interpolateColor(amplitude_spc); // Terbalik
+                    spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = interpolateColor(amplitude_spc);
+                    //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = ColorFromHSV((1 - amplitude_spc) * 180, 0.8F, 1);
+                    //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromValue(amplitude_spc);
+                    //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromAmplitude(amplitude_spc);
+                    //spectrogram_data[y * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromAmplitude(amplitude_spc);
+                }
+
             }
+
         }
 
         Color tint = WHITE;
@@ -3917,7 +3947,7 @@ void InitFile(const std::filesystem::path& filename)
     }
 }
 
-void FileZeroDataCheck(const std::filesystem::path& filename)
+void FileZeroDataCheck(const std::filesystem::path& filename) 
 {
     std::ifstream file(filename);
 
