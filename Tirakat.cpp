@@ -250,9 +250,15 @@ struct Plug {
     size_t icon_lock_index{};
     const int spectrogram_h{ static_cast<int>((1 << 9)) };
     //const int spectrogram_w{ (1 << 9) * 16 / 9 };
-    const int spectrogram_w{ 600 };
+    const int spectrogram_w{ 640 };
     Image spectrogram_image{};
     Texture2D SPECTROGRAM_TEXTURE{};
+    const int spectrogram_zone_out_w{ 255 };
+    Image spectrogram_zone_out_image{};
+    Texture2D SPECTROGRAM_ZONE_OUT_TEXTURE{};
+    Image spectrogram_zone_in_image{};
+    Texture2D SPECTROGRAM_ZONE_IN_TEXTURE{};
+
 };
 
 Plug tirakat{};
@@ -320,6 +326,12 @@ void callback(void* bufferData, unsigned int frames) {
 
         fftw_in[i][0] = left;
         fftw_in[i][1] = 0.0F;
+        //fftw_in[i][1] = right;
+    }
+
+    for (size_t i = frames; i < N; i++) {
+        fftw_in[i][0] = 0.0;  // Zero-padding for FFT input
+        fftw_in[i][1] = 0.0;
     }
 }
 
@@ -421,11 +433,11 @@ void gaussian_window(fftw_complex in[], size_t N) {
     }
 }
 
-void fftw_calculation(fftw_complex in[], fftw_complex out[], size_t n) {
-    assert(n > 0);
+void fftw_calculation(fftw_complex in[], fftw_complex out[], size_t N) {
+    assert(N > 0);
 
     fftw_plan plan{};
-    plan = fftw_plan_dft_1d(static_cast<int>(n), in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+    plan = fftw_plan_dft_1d(static_cast<int>(N), in, out, FFTW_FORWARD, FFTW_ESTIMATE);
 
     fftw_execute(plan);
 
@@ -564,7 +576,7 @@ void NotificationTool(const Rectangle& base_boundary, const Font& font, const st
 }
 
 Color interpolateColor(float normalizedValue) {
-    Color startColor = { 20, 20, 30, 255 }; // Black
+    Color startColor = { 20, 20, 25, 255 }; // Black
     Color endColor = { 255, 245, 245, 255 }; // White
 
     // Interpolate between the start and end color based on the normalized value
@@ -580,11 +592,11 @@ Color interpolateColor(float normalizedValue) {
 
 // Define gradient colors
 Color gradientColors[MAX_GRADIENT_COLORS] = {
-    Color {0, 0, 255, 255},   // Blue
-    Color {0, 255, 255, 255}, // Cyan
-    Color {0, 255, 0, 255},   // Green
-    Color {255, 255, 0, 255}, // Yellow
-    Color {255, 0, 0, 255}    // Red
+    Color {  0,   0, 255, 255},   // Blue
+    Color {  0, 255, 255, 255}, // Cyan
+    Color {  0, 255,   0, 255},   // Green
+    Color {255, 255,   0, 255}, // Yellow
+    Color {255,   0,   0, 255}    // Red
 };
 
 // Function to linearly interpolate between two colors
@@ -680,6 +692,7 @@ bool Check_StartUp_Page();
 void InitializedSpectrogram();
 //void InitializedSpectrogram(std::unique_ptr<Color[], std::default_delete<Color[]>>& spectrogram_data);
 
+void InitializedSpectrogramZoneOut();
 
 static std::vector<float> ExtractMusicData(std::string& filename) {
     std::vector<float> audio_data{};
@@ -793,9 +806,12 @@ ScreenSize screen{};
 float volume{};
 
 auto spectrogram_data = std::make_unique<Color[]>(p->spectrogram_w * p->spectrogram_h);
+std::vector<unsigned char> spectrogram_gray_color(p->spectrogram_w * p->spectrogram_h);
 std::vector<Vector2> pointsArray_RealTime_smart(BUCKETS);
 std::vector<Vector2> pointsArray_Norm_smart(BUCKETS);
 std::vector<Vector2> splines_pointer_smart(BUCKETS);
+
+std::vector<Color> spectrogram_zone_out(p->spectrogram_zone_out_w * p->spectrogram_h);
 
 int main()
 {
@@ -889,6 +905,7 @@ int main()
     //InitializedSpectrogram(spectrogram_data);
 
     InitializedSpectrogram();
+    InitializedSpectrogramZoneOut();
 
     FileCheck(data_txt);
 
@@ -997,7 +1014,41 @@ void InitializedSpectrogram()
     p->SPECTROGRAM_TEXTURE = LoadTextureFromImage(p->spectrogram_image);
 }
 
+void InitializedSpectrogramZoneOut() 
+{
+    std::vector<uint8_t> alpha_space(p->spectrogram_zone_out_w);
 
+    for (size_t i = 0; i < p->spectrogram_zone_out_w; i++) {
+        alpha_space.at(i) = static_cast<uint8_t>(i);
+    }
+
+    for (size_t i = 0; i < p->spectrogram_h; i++) {
+        for (size_t j = 0; j < p->spectrogram_zone_out_w; j++) {
+            spectrogram_zone_out.at(i * p->spectrogram_zone_out_w + j) =
+            {
+                10,
+                10,
+                10,
+                static_cast<uint8_t>(256 - alpha_space.at(j))
+            };
+        }
+    }
+
+    p->spectrogram_zone_out_image = {
+        spectrogram_zone_out.data(),
+        p->spectrogram_zone_out_w,
+        p->spectrogram_h,
+        1,
+        PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
+    };
+
+    p->SPECTROGRAM_ZONE_OUT_TEXTURE = LoadTextureFromImage(p->spectrogram_zone_out_image);
+
+    p->spectrogram_zone_in_image = ImageCopy(p->spectrogram_zone_out_image);
+    ImageFlipHorizontal(&p->spectrogram_zone_in_image);
+
+    p->SPECTROGRAM_ZONE_IN_TEXTURE = LoadTextureFromImage(p->spectrogram_zone_in_image);
+}
 
 bool Check_StartUp_Page()
 {
@@ -2612,8 +2663,8 @@ void DrawMainDisplay(Rectangle& panel_main)
     float min_amp = std::numeric_limits<float>::max();  // Or a very large positive value
     float max_amp = std::numeric_limits<float>::min();  // Or a very large negative value
     for (size_t i = 0; i < N / 2; i++) {
-        float real_num = (float)fftw_out[i][0];
-        float imaginer = (float)fftw_out[i][1];
+        float real_num = static_cast<float>(fftw_out[i][0]);
+        float imaginer = static_cast<float>(fftw_out[i][1]);
 
         float amplitude = std::sqrt((real_num * real_num) + (imaginer * imaginer));
 
@@ -2622,8 +2673,8 @@ void DrawMainDisplay(Rectangle& panel_main)
     }
 
     for (size_t i = 0; i < N / 2; i++) {
-        float real_num = (float)fftw_out[i][0];
-        float imaginer = (float)fftw_out[i][1];
+        float real_num = static_cast<float>(fftw_out[i][0]);
+        float imaginer = static_cast<float>(fftw_out[i][1]);
 
         float amplitude = std::sqrt((real_num * real_num) + (imaginer * imaginer));
 
@@ -2637,7 +2688,7 @@ void DrawMainDisplay(Rectangle& panel_main)
 
                 if (amplitude > Peak.at(j).amplitude) {
                     Peak.at(j).amplitude = amplitude;
-                    Peak.at(j).frequency_index = i;
+                    Peak.at(j).frequency_index = static_cast<int>(i);
                 }
 
             }
@@ -2661,6 +2712,7 @@ void DrawMainDisplay(Rectangle& panel_main)
 
         maxAmplitude = std::max(maxAmplitude, smoothedAmplitude.at(i));
     }
+
     // SPLINE INITIALIZATION
     /*std::unique_ptr<Vector2[]> pointsArray_RealTime_smart(new Vector2[BUCKETS]);
     std::unique_ptr<Vector2[]> pointsArray_Norm_smart(new Vector2[BUCKETS]);*/
@@ -3046,6 +3098,8 @@ void DrawMainDisplay(Rectangle& panel_main)
                 float real_num_spec = static_cast<float>(fftw_out[i][0]);
                 float imaginer_spec = static_cast<float>(fftw_out[i][1]);
                 float amplitude_spc = std::sqrt((real_num_spec * real_num_spec) + (imaginer_spec * imaginer_spec));
+                //float amplitude_spc = std::sqrt((real_num_spec * real_num_spec));
+                //float amplitude_spc = (real_num_spec);
                 min_amp_spec = std::min(min_amp_spec, amplitude_spc);
                 max_amp_spec = std::max(max_amp_spec, amplitude_spc);
             }
@@ -3080,6 +3134,48 @@ void DrawMainDisplay(Rectangle& panel_main)
         Color tint = WHITE;
         UpdateTexture(p->SPECTROGRAM_TEXTURE, spectrogram_data.get());
         DrawTexturePro(p->SPECTROGRAM_TEXTURE, source, dest, { 0,0 }, 0, tint);
+
+        // DRAW ZONE OUT
+        {
+            Rectangle dest_zone_out{
+                dest.x - 1,
+                dest.y,
+                dest.width * 0.05F,
+                dest.height 
+            };
+
+            Rectangle source_zone_out{
+                0,
+                0,
+                static_cast<float>(p->spectrogram_zone_out_w),
+                static_cast<float>(p->spectrogram_h)
+            };
+
+            Color tint = WHITE;
+            DrawTexturePro(p->SPECTROGRAM_ZONE_OUT_TEXTURE, source_zone_out, dest_zone_out, { 0,0 }, 0, tint);
+        }
+
+        // DRAW ZONE IN
+        {
+
+            Rectangle dest_zone_in{
+                dest.x + dest.width - (dest.width * 0.05F) + 1,
+                dest.y,
+                (dest.width * 0.05F),
+                dest.height
+            };
+
+            Rectangle source_zone_out{
+                0,
+                0,
+                static_cast<float>(p->spectrogram_zone_out_w),
+                static_cast<float>(p->spectrogram_h)
+            };
+
+            Color tint = WHITE;
+            DrawTexturePro(p->SPECTROGRAM_ZONE_IN_TEXTURE, source_zone_out, dest_zone_in, { 0,0 }, 0, tint);
+        }
+
 
     }
 
