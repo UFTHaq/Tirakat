@@ -169,6 +169,7 @@
 
 #define MIN_FREQ                    10.0F 
 #define MAX_FREQ                    24000.0F
+//#define MAX_FREQ                    22050.F
 #define MAX_GRADIENT_COLORS         5
 
 enum Page {
@@ -436,8 +437,8 @@ void gaussian_window(fftw_complex in[], size_t N) {
 void fftw_calculation(fftw_complex in[], fftw_complex out[], size_t N) {
     assert(N > 0);
 
-    fftw_plan plan{};
-    plan = fftw_plan_dft_1d(static_cast<int>(N), in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+    fftw_plan plan{ fftw_plan_dft_1d(static_cast<int>(N), in, out, FFTW_FORWARD, FFTW_ESTIMATE) };
+    //plan = fftw_plan_dft_1d(static_cast<int>(N), in, out, FFTW_FORWARD, FFTW_ESTIMATE);
 
     fftw_execute(plan);
 
@@ -575,27 +576,91 @@ void NotificationTool(const Rectangle& base_boundary, const Font& font, const st
     info_timer -= dt;
 }
 
-Color interpolateColor(float normalizedValue) {
+Color GrayscaleColor(float normalizedValue) {
     Color startColor = { 20, 20, 25, 255 }; // Black
     Color endColor = { 255, 245, 245, 255 }; // White
 
+    float value = normalizedValue;
+    //float value = normalizedValue * normalizedValue;
+    //float value = normalizedValue * normalizedValue * normalizedValue;
+    //float value = sqrtf(normalizedValue);
+
     // Interpolate between the start and end color based on the normalized value
     Color resultColor;
-    resultColor.r = static_cast<unsigned char>(startColor.r + normalizedValue * (endColor.r - startColor.r));
-    resultColor.g = static_cast<unsigned char>(startColor.g + normalizedValue * (endColor.g - startColor.g));
-    resultColor.b = static_cast<unsigned char>(startColor.b + normalizedValue * (endColor.b - startColor.b));
+    resultColor.r = static_cast<unsigned char>(startColor.r + value * (endColor.r - startColor.r));
+    resultColor.g = static_cast<unsigned char>(startColor.g + value * (endColor.g - startColor.g));
+    resultColor.b = static_cast<unsigned char>(startColor.b + value * (endColor.b - startColor.b));
     //resultColor.a = startColor.a + normalizedValue * (endColor.a - startColor.a);
-    resultColor.a = 100;
+    resultColor.a = 200;
 
     return resultColor;
+}
+
+Color SpectrogramColor(float normalizedValue) {
+    // Clamp value to 0-1 range
+    normalizedValue = std::clamp(normalizedValue, 0.0f, 1.0f);
+
+    // Initialize color channels
+    float red = 0.0f, green = 0.0f, blue = 0.0f, alpha = 240.0F;
+
+    if (normalizedValue > 0.8f) {
+        // White
+        red = 255.0f;
+        green = 255.0f;
+        blue = 255.0f;
+        alpha = 255.0f;
+    }
+    else if (normalizedValue > 0.6f) {
+        // Yellow
+        red = 255.0f;
+        green = 255.0f;
+        blue = 0.0f;
+    }
+    else if (normalizedValue > 0.35f) {
+        // Orange
+        red = 255.0f;
+        green = 165.0f;
+        blue = 0.0f;
+        alpha = 200.0F;
+    }
+    else if (normalizedValue > 0.2f) {
+        // Pink
+        red = 242.0f;
+        green = 5.0f;
+        blue = 153.0f;
+        alpha = 140.0F;
+    }
+    else if (normalizedValue > 0.1f) {
+        // Light Purple
+        red = 133.0f;
+        green = 50.0f;
+        blue = 204.0f;
+        alpha = 120.0F;
+    }
+    else if (normalizedValue > 0.05f) {
+        // Dark Purple
+        red = 75.0f;
+        green = 0.0f;
+        blue = 130.0f;
+        alpha = 100.0F;
+    }
+    else {
+        // Zero Value
+        red = 21;
+        green = 21;
+        blue = 22;
+    }
+
+    // Return the color as raylib Color
+    return Color{ (unsigned char)red, (unsigned char)green, (unsigned char)blue, (unsigned char)alpha };
 }
 
 // Define gradient colors
 Color gradientColors[MAX_GRADIENT_COLORS] = {
     Color {  0,   0, 255, 255},   // Blue
-    Color {  0, 255, 255, 255}, // Cyan
+    Color {  0, 255, 255, 255},   // Cyan
     Color {  0, 255,   0, 255},   // Green
-    Color {255, 255,   0, 255}, // Yellow
+    Color {255, 255,   0, 255},   // Yellow
     Color {255,   0,   0, 255}    // Red
 };
 
@@ -832,7 +897,7 @@ int main()
 
     InitWindow((int)screen.w, (int)screen.h, "Tirakat");
     InitAudioDevice();
-    SetTargetFPS(75);
+    SetTargetFPS(99);
     SetWindowIcon(LoadImage(ICON_APP_LOC));
     //ToggleBorderlessWindowed();
     //SetWindowOpacity(0.75F);
@@ -3120,7 +3185,8 @@ void DrawMainDisplay(Rectangle& panel_main)
                     if (amplitude_spc < 0.1F) amplitude_spc = 0.0F;
                     int inverse = p->spectrogram_h - y;
                     //spectrogram_data[y * p->spectrogram_w + (p->spectrogram_w - speed)] = interpolateColor(amplitude_spc); // Terbalik
-                    spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = interpolateColor(amplitude_spc);
+                    //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = InterpolateColor(amplitude_spc);
+                    spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = SpectrogramColor(amplitude_spc);
                     //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = ColorFromHSV((1 - amplitude_spc) * 180, 0.8F, 1);
                     //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromValue(amplitude_spc);
                     //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromAmplitude(amplitude_spc);
