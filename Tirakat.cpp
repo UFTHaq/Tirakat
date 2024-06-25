@@ -102,6 +102,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <cmath>
+#include <mutex>
 
 #include <chrono>
 #include <thread>
@@ -172,6 +173,8 @@
 //#define MAX_FREQ                    22050.F
 #define MAX_GRADIENT_COLORS         5
 
+const int N{ 480 * 2 };
+
 enum Page {
     PAGE_DRAG_DROP,
     PAGE_MAIN
@@ -224,6 +227,7 @@ struct Plug {
     int play{};
     int dragging{};
     bool music_playing{};
+    uint8_t music_channel{ 2 };
     bool reset_time{};
     bool icon_pp_index{};
     bool volume_mute{ false };
@@ -249,7 +253,8 @@ struct Plug {
     float mouse_onscreen_timer{ HUD_TIMER_SECS };
     bool visual_time_domain_lock{ ON };
     size_t icon_lock_index{};
-    const int spectrogram_h{ static_cast<int>((1 << 9)) };
+    //const int spectrogram_h{ static_cast<int>((1 << 9)) };
+    const int spectrogram_h{ static_cast<int>((N / 2)) };
     //const int spectrogram_w{ (1 << 9) * 16 / 9 };
     const int spectrogram_w{ 640 };
     Image spectrogram_image{};
@@ -292,11 +297,14 @@ struct Frame {
     float right{};
 };
 
-const int N{ 1 << 10 };
+//const int N{ 1 << 10 };
+
 //fftw_complex* fftw_in  = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
 //fftw_complex* fftw_out = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
 std::vector<fftw_complex> fftw_in(N);
 std::vector<fftw_complex> fftw_out(N);
+std::vector<float> wave_live(N / 2, 0.0F);
+std::mutex wave_mutex;
 
 const int BUCKETS{ 1 << 6 };
 //const int BUCKETS{ 80 };
@@ -307,7 +315,6 @@ const int SMOOTHING_BUFFER_SIZE{ 15 };
 std::array<std::array<float, SMOOTHING_BUFFER_SIZE>, BUCKETS> prevAmplitude{};
 std::array<float, BUCKETS> smoothedAmplitude{};
 std::array<float, BUCKETS> out_smear{};
-//std::array<bool, BUCKETS> stronger{};
 float maxAmplitude = 0.0F;
 
 struct PeakInfo {
@@ -317,22 +324,26 @@ struct PeakInfo {
 std::array<PeakInfo, BUCKETS> Peak{};
 
 void callback(void* bufferData, unsigned int frames) {
-    if (frames > N) frames = N;
+    // Cast buffer data to float array
+    float* samples = (float*)bufferData;
 
-    Frame* fs = reinterpret_cast<Frame*>(bufferData);
+    // Lock the mutex to safely update the global buffer
+    std::lock_guard<std::mutex> lock(wave_mutex);
 
-    for (size_t i = 0; i < frames; i++) {
-        float left = fs[i].left;
-        float right = fs[i].right;
+    // Process the samples
+    for (unsigned int i = 0; i < frames; i++) {
 
-        fftw_in[i][0] = left;
-        fftw_in[i][1] = 0.0F;
-        //fftw_in[i][1] = right;
+        float leftSample = samples[2 * i];       // Left channel sample
+        float rightSample = samples[2 * i + 1];  // Right channel sample
+
+        // You can choose to store only one channel or process both
+        wave_live[i] = (leftSample + rightSample) / 2.0f; // Example: average of both channels
+
+        fftw_in[i][0] = (leftSample + rightSample) / 2.0f;
     }
 
-    for (size_t i = frames; i < N; i++) {
-        fftw_in[i][0] = 0.0;  // Zero-padding for FFT input
-        fftw_in[i][1] = 0.0;
+    if (IsKeyPressed(KEY_D)) {
+        std::cout << "frame size: " << frames << std::endl;
     }
 }
 
@@ -417,18 +428,25 @@ void hann_window(fftw_complex in[], size_t N) {
     }
 }
 
+void hann_window(float in[], size_t N) {
+    for (size_t i = 0; i < N; i++) {
+        float w = 0.5F * (1.0F - cosf(2.0F * PI * i / (N - 1)));
+        in[i] *= w;
+    }
+}
+
 void hamming_window(fftw_complex in[], size_t N) {
     for (size_t i = 0; i < N; i++) {
-        float w = 0.54 - 0.46 * cos(2 * PI * i / (N - 1));
+        float w = 0.54F - 0.46F * cos(2 * PI * i / (N - 1));
         in[i][0] *= w;
     }
 }
 
 void gaussian_window(fftw_complex in[], size_t N) {
     float sigma = 0.5F;
-    float center = (N - 1) / 2.0f; // Center of the window
+    float center = (N - 1) / 2.0F; // Center of the window
     for (size_t i = 0; i < N; i++) {
-        float exponent = -0.5 * std::pow((i - center) / (sigma * center), 2);
+        float exponent = -0.5F * std::powf((i - center) / (sigma * center), 2);
         float w = std::exp(exponent);
         in[i][0] *= w;
     }
@@ -437,7 +455,9 @@ void gaussian_window(fftw_complex in[], size_t N) {
 void fftw_calculation(fftw_complex in[], fftw_complex out[], size_t N) {
     assert(N > 0);
 
-    fftw_plan plan{ fftw_plan_dft_1d(static_cast<int>(N), in, out, FFTW_FORWARD, FFTW_ESTIMATE) };
+    //fftw_plan plan{ fftw_plan_dft_1d(static_cast<int>(N), in, out, FFTW_FORWARD, FFTW_ESTIMATE) };
+    fftw_plan plan{ fftw_plan_dft_1d(static_cast<int>(N), in, out, FFTW_FORWARD, FFTW_MEASURE) };
+
     //plan = fftw_plan_dft_1d(static_cast<int>(N), in, out, FFTW_FORWARD, FFTW_ESTIMATE);
 
     fftw_execute(plan);
@@ -610,39 +630,68 @@ Color SpectrogramColor(float normalizedValue) {
         blue = 255.0f;
         alpha = 255.0f;
     }
-    else if (normalizedValue > 0.6f) {
+    else if (normalizedValue > 0.65f) {
+        // ALMOST WHITE
+        red = 245.0f;
+        green = 235.0f;
+        blue = 235.0f;
+        alpha = 255.0f;
+    }
+    else if (normalizedValue > 0.55f) {
+        // ALMOST WHITE
+        red = 235.0f;
+        green = 225.0f;
+        blue = 225.0f;
+        alpha = 255.0f;
+    }
+    else if (normalizedValue > 0.45f) {
         // Yellow
         red = 255.0f;
-        green = 255.0f;
-        blue = 0.0f;
+        green = 245.0f;
+        blue = 50.0f;
+        alpha = 200.0f;
     }
+    //else if (normalizedValue > 0.6f) {
+    //    // Yellow
+    //    red = 255.0f;
+    //    green = 255.0f;
+    //    blue = 0.0f;
+    //    alpha = 200.0F;
+    //}
     else if (normalizedValue > 0.35f) {
         // Orange
         red = 255.0f;
         green = 165.0f;
-        blue = 0.0f;
+        blue = 50.0f;
         alpha = 200.0F;
     }
-    else if (normalizedValue > 0.2f) {
+    else if (normalizedValue > 0.25f) {
         // Pink
-        red = 242.0f;
-        green = 5.0f;
-        blue = 153.0f;
-        alpha = 140.0F;
+        red = 100.0f;
+        green = 50.0f;
+        blue = 130.0f;
+        alpha = 180.0F;
+    }
+    else if (normalizedValue > 0.15f) {
+        // Light Purple
+        red = 80.0f;
+        green = 50.0f;
+        blue = 100.0f;
+        alpha = 180.0F;
     }
     else if (normalizedValue > 0.1f) {
-        // Light Purple
-        red = 133.0f;
-        green = 50.0f;
-        blue = 204.0f;
-        alpha = 120.0F;
+        // Dark Purple
+        red = 55.0f;
+        green = 30.0f;
+        blue = 70.0f;
+        alpha = 150.0F;
     }
     else if (normalizedValue > 0.05f) {
-        // Dark Purple
-        red = 75.0f;
-        green = 0.0f;
-        blue = 130.0f;
-        alpha = 100.0F;
+        // Dark Purple 35, 22, 59
+        red = 45.0f;
+        green = 20.0f;
+        blue = 60.0f;
+        alpha = 120.0F;
     }
     else {
         // Zero Value
@@ -877,6 +926,7 @@ std::vector<Vector2> pointsArray_Norm_smart(BUCKETS);
 std::vector<Vector2> splines_pointer_smart(BUCKETS);
 
 std::vector<Color> spectrogram_zone_out(p->spectrogram_zone_out_w * p->spectrogram_h);
+std::vector<Vector2> audio_wave_live(wave_live.size());
 
 int main()
 {
@@ -978,6 +1028,7 @@ int main()
         ReloadVector();
 
         music = LoadMusicStream(data.at(music_play).path.c_str());
+        p->music_channel = music.stream.channels;
         time_domain_signal = ExtractMusicData(data.at(music_play).path);
 
         while (!IsMusicReady(music)) {
@@ -1094,6 +1145,7 @@ void InitializedSpectrogramZoneOut()
                 10,
                 10,
                 10,
+                //static_cast<uint8_t>(256 - alpha_space.at(j))
                 static_cast<uint8_t>(256 - alpha_space.at(j))
             };
         }
@@ -1245,8 +1297,9 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
     }
 
     // Important to re rise after each moving the progress time to play the sound smooth with no sudden change in buffer sound.
+    float set_music_volume = 1.0F;
     static float music_volume = 0.5F;
-    if (music_volume < 0.5F) music_volume += 0.02F;
+    if (music_volume < set_music_volume) music_volume += 0.02F;
 
     if (IsMusicReady(music)) {
         SetMusicVolume(music, music_volume);
@@ -1293,6 +1346,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
                     DetachAudioStreamProcessor(music.stream, callback);
                     ResetVisualizerParameter();
                     music = LoadMusicStream(data.at(music_play).path.c_str());
+                    p->music_channel = music.stream.channels;
                     AttachAudioStreamProcessor(music.stream, callback);
 
                     time_domain_signal = ExtractMusicData(data.at(music_play).path);
@@ -2251,6 +2305,7 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
 
                             music_play = i;
                             music = LoadMusicStream(data.at(music_play).path.c_str());
+                            p->music_channel = music.stream.channels;
                             time_domain_signal = ExtractMusicData(data.at(music_play).path);
 
                             AttachAudioStreamProcessor(music.stream, callback);
@@ -2636,6 +2691,7 @@ void DeleteMusic(int& retFlag, size_t order)
             ResetVisualizerParameter();
 
             music = LoadMusicStream(data.at(music_play).path.c_str());
+            p->music_channel = music.stream.channels;
             time_domain_signal = ExtractMusicData(data.at(music_play).path);
 
             p->reset_time = true;
@@ -2745,8 +2801,6 @@ void DrawMainDisplay(Rectangle& panel_main)
 
         for (size_t j = 0; j < BUCKETS; j++) {
             float freq = min_frequency + i * bin_width;
-            //float freq = i * 48000/N;
-            //float freq = std::powf(10, log_f_min + i * delta_log);
 
             if (freq >= Freq_Bin.at(j) && freq <= Freq_Bin.at(j + 1)) {
                 Spectrum.at(j) = std::max(Spectrum.at(j), amplitude);
@@ -2794,7 +2848,7 @@ void DrawMainDisplay(Rectangle& panel_main)
             smoothedAmplitude.at(i) = exponential_scale(final_amplitude, 0.5F);
             break;
         case MODE_MULTI_PEAK:
-            smoothedAmplitude.at(i) = multi_peak_scale(final_amplitude, i, 1.0F, Peak);
+            smoothedAmplitude.at(i) = multi_peak_scale(final_amplitude, static_cast<int>(i), 1.0F, Peak);
             break;
         case MODE_MAX_PEAK:
             smoothedAmplitude.at(i) = max_peak_scale(final_amplitude, maxAmplitude, 0.2F);
@@ -2953,10 +3007,10 @@ void DrawMainDisplay(Rectangle& panel_main)
             color = ColorFromHSV(hue * 360 + GetFrameTime(), sat, val);
             Vector2 center_panel_main{
                 panel_display.x + (panel_display.width * 0.5F),
-                panel_display.y + (panel_display.height * 0.55F)
+                panel_display.y + (panel_display.height * 0.58F)
             };
 
-            float value = sqrt(final_amplitude) * panel_display.height * 0.45F;
+            float value = sqrt(final_amplitude) * panel_display.height * 0.42F;
             float angle = (360.0F / 50.0F) * i;
             //float angle = 0.5F * (float)i;
             Vector2 startPos_fft_rotation = center_panel_main;
@@ -3112,7 +3166,7 @@ void DrawMainDisplay(Rectangle& panel_main)
     }
 
     if (p->visual_mode_active == SPECTROGRAM) {
-        float space_from_top = 80;
+        float space_from_top = panel_display.height * 0.15F;
         Rectangle spectrogram_base_panel{
             panel_display.x,
             panel_display.y + space_from_top,
@@ -3122,7 +3176,7 @@ void DrawMainDisplay(Rectangle& panel_main)
 
         static float dest_w{};
         static float dest_h{};
-        float pad = 20.0F;
+        float pad = 35.0F;
         if (spectrogram_base_panel.width < spectrogram_base_panel.height) {
             dest_w = std::round(spectrogram_base_panel.width - (pad * 2));
             dest_h = std::round(dest_w * (9 / 16.0F));
@@ -3146,9 +3200,9 @@ void DrawMainDisplay(Rectangle& panel_main)
         
         Rectangle source{
             0,
-            0,
-            static_cast<float>(p->spectrogram_w),
-            static_cast<float>(p->spectrogram_h)
+                0,
+                static_cast<float>(p->spectrogram_w),
+                static_cast<float>(p->spectrogram_h)
         };
 
         static int time_skip = 0;
@@ -3169,8 +3223,8 @@ void DrawMainDisplay(Rectangle& panel_main)
                 max_amp_spec = std::max(max_amp_spec, amplitude_spc);
             }
 
-            int speed = 1;
 
+            int speed = 1;
             if (p->music_playing) {
 
                 for (size_t y = 0; y < p->spectrogram_h; y++) {
@@ -3183,7 +3237,7 @@ void DrawMainDisplay(Rectangle& panel_main)
 
                     amplitude_spc = normalization(amplitude_spc, min_amp_spec, max_amp_spec);
                     if (amplitude_spc < 0.1F) amplitude_spc = 0.0F;
-                    int inverse = p->spectrogram_h - y;
+                    int inverse = p->spectrogram_h - static_cast<int>(y);
                     //spectrogram_data[y * p->spectrogram_w + (p->spectrogram_w - speed)] = interpolateColor(amplitude_spc); // Terbalik
                     //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = InterpolateColor(amplitude_spc);
                     spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = SpectrogramColor(amplitude_spc);
@@ -3206,28 +3260,7 @@ void DrawMainDisplay(Rectangle& panel_main)
             Rectangle dest_zone_out{
                 dest.x - 1,
                 dest.y,
-                dest.width * 0.05F,
-                dest.height 
-            };
-
-            Rectangle source_zone_out{
-                0,
-                0,
-                static_cast<float>(p->spectrogram_zone_out_w),
-                static_cast<float>(p->spectrogram_h)
-            };
-
-            Color tint = WHITE;
-            DrawTexturePro(p->SPECTROGRAM_ZONE_OUT_TEXTURE, source_zone_out, dest_zone_out, { 0,0 }, 0, tint);
-        }
-
-        // DRAW ZONE IN
-        {
-
-            Rectangle dest_zone_in{
-                dest.x + dest.width - (dest.width * 0.05F) + 1,
-                dest.y,
-                (dest.width * 0.05F),
+                dest.width * 0.025F,
                 dest.height
             };
 
@@ -3239,11 +3272,97 @@ void DrawMainDisplay(Rectangle& panel_main)
             };
 
             Color tint = WHITE;
-            DrawTexturePro(p->SPECTROGRAM_ZONE_IN_TEXTURE, source_zone_out, dest_zone_in, { 0,0 }, 0, tint);
+            DrawTexturePro(p->SPECTROGRAM_ZONE_OUT_TEXTURE, source_zone_out, dest_zone_out, { 0,0 }, 0, Fade(tint, 0.5F));
+        }
+
+        // DRAW ZONE IN
+        {
+
+            Rectangle dest_zone_in{
+                dest.x + dest.width - (dest.width * 0.025F) + 1,
+                dest.y,
+                (dest.width * 0.025F),
+                dest.height
+            };
+
+            Rectangle source_zone_out{
+                0,
+                0,
+                static_cast<float>(p->spectrogram_zone_out_w),
+                static_cast<float>(p->spectrogram_h)
+            };
+
+            Color tint = WHITE;
+            DrawTexturePro(p->SPECTROGRAM_ZONE_IN_TEXTURE, source_zone_out, dest_zone_in, { 0,0 }, 0, Fade(tint, 0.5F));
         }
 
 
     }
+
+    {
+        if (p->music_playing) {
+            hann_window(wave_live.data(), wave_live.size());
+        }
+
+        // AUDIO WAVE LIVE
+        float width = panel_display.height * 0.3F;
+        float height = width * 0.6F;
+        Rectangle wave_live_signal_base{
+            panel_display.x + (panel_display.width - width) / 2,
+            panel_display.y + 50,
+            width,
+            height
+        };
+        //DrawRectangleRec(wave_live_signal_base, RAYWHITE);
+
+        float pad = wave_live_signal_base.height * 0.05F;
+        Rectangle wave_live_signal_rect{
+            wave_live_signal_base.x,
+            wave_live_signal_base.y + (pad * 1),
+            wave_live_signal_base.width,
+            wave_live_signal_base.height - (pad * 2),
+        };
+        //DrawRectangleRec(wave_live_signal_rect, RAYWHITE);
+
+        float shrink_coef = 0.940F;
+        Rectangle shrink_data_audio{
+            wave_live_signal_base.x,
+            wave_live_signal_base.y,
+            wave_live_signal_base.width * shrink_coef,
+            wave_live_signal_base.height,
+        };
+        //DrawRectangleRec(shrink_data_audio, Fade(GREEN, 0.1F));
+
+        Rectangle empty_data_audio{
+            shrink_data_audio.x + shrink_data_audio.width,
+            shrink_data_audio.y,
+            wave_live_signal_base.width* (1 - shrink_coef),
+            shrink_data_audio.height
+        };
+        //DrawRectangleRec(empty_data_audio, Fade(RED, 0.1F));
+
+        float center_hor = wave_live_signal_rect.y + (wave_live_signal_rect.height / 2);
+        float point_width = wave_live_signal_rect.width / wave_live.size();
+        for (size_t i = 0; i < audio_wave_live.size(); i++) {
+            audio_wave_live.at(i) = {
+                wave_live_signal_rect.x + (point_width * i),
+                center_hor + (wave_live_signal_rect.height * wave_live.at(i)) * 0.4F,
+                //center_hor + (wave_live_signal_rect.height * static_cast<float>(fftw_in[i][0])) * 0.5F,
+            };
+        }
+
+        DrawSplineLinear(audio_wave_live.data(), (int)wave_live.size(), 2.F, RAYWHITE);
+
+        if (IsKeyPressed(KEY_P)) {
+            for (auto& i : wave_live) {
+                std::cout << i << " ";
+            }
+            std::cout << std::endl;
+            std::cout << wave_live.size() << std::endl;
+        }
+
+    }
+
 
     // PANEL LOCK VISUAL TIME DOMAIN
     DrawLockButton(panel_main, dt);
@@ -3520,8 +3639,6 @@ void DrawVisualModeButton(Rectangle& panel_main, float dt)
                     visual_mode_active.y + (visual_mode_active.height - text_measure.y) / 2,
                 };
                 DrawTextEx(*font, text, text_coor, font_size, font_space, font_color);
-                
-
     
             }
     
@@ -3863,6 +3980,7 @@ void LoadMP3()
                 if (zero_data) {
                     music_play = 0;
                     music = LoadMusicStream(data.at(music_play).path.c_str());
+                    p->music_channel = music.stream.channels;
                     while (!IsMusicReady(music)) {
                     }
                     PlayMusicStream(music);
