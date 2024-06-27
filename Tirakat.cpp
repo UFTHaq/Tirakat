@@ -59,6 +59,13 @@
 //    Tetapi tidak berpindah naik dan turun berdasarkan data terbaru, melainkan turun seperti gravitasi dengan moving average.
 // 
 // 2. Seringkali FFT tidak tampil, mungkin attach terjadi ketika music belum siap, jadi perlu while loop dulu sampai siap lalu lanjut ke attach music.
+// 
+// 3. Tambah Splash Screen
+// 
+// 4. Tambah notification format file couldn't load.
+// 
+// 5. Edge case: jika ada simbol tidak umum di judul, biasanya tidak akan bisa load. perbaiki, atau tambah notifikasi perlu mengubah judul.
+//
 
 
 // MAXIMUM MIDI FREQ -> G#9/Ab9 = 13289.75Hz
@@ -206,6 +213,11 @@ enum VisualModes {
     SPECTROGRAM
 };
 
+enum TrimString {
+    EASY,
+    BOLD
+};
+
 struct VisualMode {
     std::string title{};
     std::string shortcut{};
@@ -220,6 +232,35 @@ VisualMode visualM4{ "Spectogram"   , "V + 4", ON };
 struct Notification {
     std::string g_info{};
     float g_info_timer{};
+};
+
+struct ErrorPopup {
+    std::string name{};
+    float time{ 0.0F };
+    float alpha{ 1.0F };
+
+    ErrorPopup(const std::string& name) : name(name) {}
+
+    void updateTime() {
+        time += GetFrameTime();
+    }
+
+    void updateAlpha() {
+        float threshold = 5.0F;
+        if (time > threshold) {
+            alpha -= 0.01F;
+            if (alpha < 0.0F) alpha = 0.0F;
+        }
+    }
+
+    void updateAll() {
+        updateTime();
+        updateAlpha();
+    }
+
+    bool isExpired() const {
+        return alpha <= 0.0F;
+    }
 };
 
 struct Plug {
@@ -264,7 +305,7 @@ struct Plug {
     Texture2D SPECTROGRAM_ZONE_OUT_TEXTURE{};
     Image spectrogram_zone_in_image{};
     Texture2D SPECTROGRAM_ZONE_IN_TEXTURE{};
-
+    std::deque<ErrorPopup> ErrorDragDropPopupTray{};
 };
 
 Plug tirakat{};
@@ -322,6 +363,8 @@ struct PeakInfo {
     float amplitude{};
 };
 std::array<PeakInfo, BUCKETS> Peak{};
+
+
 
 void callback(void* bufferData, unsigned int frames) {
     // Cast buffer data to float array
@@ -646,51 +689,44 @@ Color SpectrogramColor(float normalizedValue) {
     }
     else if (normalizedValue > 0.45f) {
         // Yellow
-        red = 255.0f;
+        red = 235.0f;
         green = 245.0f;
-        blue = 50.0f;
-        alpha = 200.0f;
+        blue = 120.0f;
+        alpha = 150.0f;
     }
-    //else if (normalizedValue > 0.6f) {
-    //    // Yellow
-    //    red = 255.0f;
-    //    green = 255.0f;
-    //    blue = 0.0f;
-    //    alpha = 200.0F;
-    //}
     else if (normalizedValue > 0.35f) {
         // Orange
-        red = 255.0f;
+        red = 235.0f;
         green = 165.0f;
-        blue = 50.0f;
-        alpha = 200.0F;
+        blue = 90.0f;
+        alpha = 150.0F;
     }
     else if (normalizedValue > 0.25f) {
         // Pink
         red = 100.0f;
-        green = 50.0f;
-        blue = 130.0f;
+        green = 90.0f;
+        blue = 120.0f;
         alpha = 180.0F;
     }
     else if (normalizedValue > 0.15f) {
         // Light Purple
-        red = 80.0f;
-        green = 50.0f;
-        blue = 100.0f;
+        red = 70.0f;
+        green = 60.0f;
+        blue = 110.0f;
         alpha = 180.0F;
     }
     else if (normalizedValue > 0.1f) {
         // Dark Purple
-        red = 55.0f;
-        green = 30.0f;
-        blue = 70.0f;
+        red = 45.0f;
+        green = 40.0f;
+        blue = 80.0f;
         alpha = 150.0F;
     }
     else if (normalizedValue > 0.05f) {
         // Dark Purple 35, 22, 59
-        red = 45.0f;
+        red = 35.0f;
         green = 20.0f;
-        blue = 60.0f;
+        blue = 70.0f;
         alpha = 120.0F;
     }
     else {
@@ -737,7 +773,6 @@ Color getColorFromValue(float value) {
     return ColorLerp(color1, color2, colorPercentage);
 }
 
-
 Color getColorFromAmplitude(float normalizedAmplitude) {
     // Map normalized amplitude to brightness (0 to 255)
     unsigned char brightness = (unsigned char)(normalizedAmplitude * 255);
@@ -781,6 +816,8 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel);
 
 void DrawMusicList(Rectangle& panel_left, int& retFlag);
 
+std::string TrimDisplayString(std::string& cpp_text, float text_width_limit, float font_size, float font_space, int TrimString);
+
 void DeleteMusic(int& retFlag, size_t order);
 
 void ResetVisualizerParameter();
@@ -804,6 +841,11 @@ void DrawDragDropPage(ScreenSize screen);
 bool Check_StartUp_Page();
 
 void InitializedSpectrogram();
+
+void DrawSplashScreen();
+
+void DrawErrorPopupTray();
+
 //void InitializedSpectrogram(std::unique_ptr<Color[], std::default_delete<Color[]>>& spectrogram_data);
 
 void InitializedSpectrogramZoneOut();
@@ -878,6 +920,7 @@ Font font_counter{};
 Font font_visual_mode{};
 Font font_visual_mode_child{};
 
+Texture2D TIRAKAT_ICON_TEX{};
 Texture2D PLAYPAUSE_TEX{};
 Texture2D FULLSCREEN_TEX{};
 Texture2D VOLUME_TEX{};
@@ -976,6 +1019,9 @@ int main()
     font_visual_mode_child = LoadFontEx(FONT_LOC_Sofia_Sans_Condensed_REG, 60, 0, 0);
     SetTextureFilter(font_visual_mode_child.texture, RL_TEXTURE_FILTER_BILINEAR);
 
+    Image tirakat_icon = LoadImage(ICON_APP_LOC);
+    TIRAKAT_ICON_TEX = LoadTextureFromImage(tirakat_icon);
+    SetTextureFilter(TIRAKAT_ICON_TEX, TEXTURE_FILTER_BILINEAR);
 
     Image play_pause_icon = LoadImage(ICON_PLAYPAUSE_LOC);
     PLAYPAUSE_TEX = LoadTextureFromImage(play_pause_icon);
@@ -1092,6 +1138,10 @@ int main()
         //DrawFPS(screen.w - 83, 10);
         DrawFPS(screen.w / 2 - 38, 10);
 
+        DrawErrorPopupTray();
+
+        DrawSplashScreen();
+
         EndDrawing();
     }
 
@@ -1104,6 +1154,155 @@ int main()
 
     return 0;
 }
+
+void DrawErrorPopupTray()
+{
+    if (!p->ErrorDragDropPopupTray.empty()) {
+
+        for (size_t i = 0; i < p->ErrorDragDropPopupTray.size(); i++) {
+            ErrorPopup& error = p->ErrorDragDropPopupTray.at(i);
+
+            error.updateAll();
+
+            float error_popup_w = 225;
+            float error_popup_h = 60;
+            float space = 15;
+            float alpha = error.alpha;
+            Rectangle error_popup_rect{
+                screen.w - error_popup_w - space,
+                screen.h - error_popup_h - space - (i * (error_popup_h + space)),
+                error_popup_w,
+                error_popup_h
+            };
+            Color color_bg = RED;
+            DrawRectangleRounded(error_popup_rect, 0.2F, 10, Fade(color_bg, alpha));
+
+            {
+                // Draw Text
+                font = &font_s_reg;
+                Color font_color = WHITE;
+                std::string text_cpp = "Could not load \"" + error.name + "\"";
+                // trim text_cpp sesuai dengan space
+                float font_size = error_popup_rect.height * 0.5F;
+                float font_space = 0.0F;
+                float width_text = error_popup_rect.width * 0.9F;
+                text_cpp = TrimDisplayString(text_cpp, width_text, font_size, font_space, EASY);
+                const char* text = text_cpp.c_str();
+                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+                Vector2 text_coor{
+                    error_popup_rect.x + (error_popup_rect.width - text_measure.x) / 2,
+                    error_popup_rect.y + (error_popup_rect.height - text_measure.y) / 2
+                };
+                DrawTextEx(*font, text, text_coor, font_size, font_space, Fade(font_color, alpha));
+            }
+
+        }
+
+        if (p->ErrorDragDropPopupTray.back().isExpired()) p->ErrorDragDropPopupTray.pop_back();
+
+    }
+}
+
+void DrawSplashScreen()
+{
+    // Draw Splash Screen
+    double splash_screen_time = 7.0;
+    static bool draw_splash_screen = true;
+    if (draw_splash_screen) {
+        float splash_screen_w = 250;
+        float splash_screen_h = 90;
+        float space = 20;
+        static float alpha = 1.0F;
+        Rectangle splash_screen_rect{
+            screen.w - splash_screen_w - space,
+            screen.h - splash_screen_h - space,
+            splash_screen_w,
+            splash_screen_h
+        };
+        Color color_bg = { 16, 16, 16, 255 };
+        Color color_line = { 224,229,124,255 };
+
+        if (GetTime() > splash_screen_time) alpha -= 0.005F;
+
+        if (alpha <= 0.0F) draw_splash_screen = false;
+
+        DrawRectangleRounded(splash_screen_rect, 0.225F, 10, Fade(color_bg, 1.0F * alpha));
+        DrawRectangleRoundedLines(splash_screen_rect, 0.225F, 10, 3.0F, Fade(color_line, 1.0F * alpha));
+
+        // Draw Content
+        {
+            float space = 10.F;
+            Rectangle dest{
+                splash_screen_rect.x + space,
+                splash_screen_rect.y + space,
+                splash_screen_rect.height - (space * 2),
+                splash_screen_rect.height - (space * 2)
+            };
+            DrawRectangleRoundedLines(dest, 0.15F, 10, 1.0F, Fade(LIGHTGRAY, alpha));
+            Rectangle source{ 0,0,200,200 };
+            DrawTexturePro(TIRAKAT_ICON_TEX, source, dest, { 0,0 }, 0, Fade(WHITE, alpha));
+
+            // Draw Made By
+            Rectangle text_rect{
+                dest.x + dest.width + space,
+                dest.y,
+                (splash_screen_rect.x + splash_screen_rect.width) - (dest.x + dest.width) - (space * 2),
+                dest.height
+            };
+            //DrawRectangleRoundedLines(text_rect, 0.1F, 10, 1.0F, Fade(LIGHTGRAY, alpha));
+
+            float rect_space = -0.025F;
+            float rect_space_top = 0.3F;
+            float rect_space_bot = 1 - rect_space - rect_space_top;
+            Rectangle text_rect_top{
+                text_rect.x,
+                text_rect.y,
+                text_rect.width,
+                text_rect.height * rect_space_top
+            };
+            //DrawRectangleRoundedLines(text_rect_top, 0.1F, 10, 1.0F, Fade(LIGHTGRAY, alpha));
+
+            {
+                font = &font_s_reg;
+                Color font_color = WHITE;
+                const char* text = "MADE BY";
+                float font_size = text_rect_top.height * 1.4F;
+                float font_space = 0.0F;
+                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+                Vector2 text_coor{
+                    text_rect_top.x + (text_rect_top.width - text_measure.x) / 2,
+                    text_rect_top.y + (text_rect_top.height - text_measure.y) / 2
+                };
+                DrawTextEx(*font, text, text_coor, font_size, font_space, Fade(font_color, alpha));
+            }
+
+
+            // Draw UFTHaq
+            Rectangle text_rect_bot{
+                text_rect.x,
+                text_rect.y + (text_rect.height * rect_space_top) + (text_rect.height * rect_space),
+                text_rect.width,
+                text_rect.height * rect_space_bot
+            };
+            //DrawRectangleRoundedLines(text_rect_bot, 0.1F, 10, 1.0F, Fade(LIGHTGRAY, alpha));
+
+            {
+                font = &font_s_bold;
+                Color font_color = WHITE;
+                const char* text = "UFTHaq";
+                float font_size = text_rect_bot.height * 1.2F;
+                float font_space = 0.0F;
+                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+                Vector2 text_coor{
+                    text_rect_bot.x + (text_rect_bot.width - text_measure.x) / 2,
+                    text_rect_bot.y + (text_rect_bot.height - text_measure.y) / 2
+                };
+                DrawTextEx(*font, text, text_coor, font_size, font_space, Fade(font_color, alpha));
+            }
+        }
+    }
+}
+
 
 void InitializedSpectrogram()
 {
@@ -2480,16 +2679,10 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
         float font_size = content_h * 0.5F;
         float font_space = -0.25F;
         //float font_space = 0.0F;
-        float text_width = 0.0F;
-        int max_chars = 0;
 
         std::string cpp_text = data.at(i).name;
-        while (text_width < text_width_limit && max_chars < cpp_text.length()) {
-            text_width = MeasureTextEx(*font, cpp_text.substr(0, max_chars + 1).c_str(), font_size, font_space).x;
-            max_chars++;
-        }
 
-        std::string first_10 = cpp_text.substr(0, max_chars);
+        std::string first_10 = TrimDisplayString(cpp_text, text_width_limit, font_size, font_space, BOLD);
         const char* text = first_10.c_str();
         Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
         Vector2 text_coor = {
@@ -2651,6 +2844,31 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
             }
         }
     }
+}
+
+std::string TrimDisplayString(std::string& cpp_text, float text_width_limit, float font_size, float font_space, int TrimString)
+{
+    float text_width = 0.0F;
+    int max_chars = 0;
+    while (text_width < text_width_limit && max_chars < cpp_text.length()) {
+        text_width = MeasureTextEx(*font, cpp_text.substr(0, max_chars + 1).c_str(), font_size, font_space).x;
+        max_chars++;
+    }
+
+    std::string result{};
+    if (TrimString == EASY) {
+        if (text_width > text_width_limit) {
+            std::string titik_titik = "..";
+            return  result = cpp_text.substr(0, (max_chars - titik_titik.size())) + titik_titik;
+        }
+        else {
+            return result = cpp_text.substr(0, max_chars);
+        }
+    }
+    else if (TrimString == BOLD) {
+        return result = cpp_text.substr(0, max_chars);
+    }
+
 }
 
 void DeleteMusic(int& retFlag, size_t order)
@@ -3996,6 +4214,7 @@ void LoadMP3()
         }
         else {
             TraceLog(LOG_ERROR, "Failed adding new file, only support mp3/wav/flac/ogg files");
+            p->ErrorDragDropPopupTray.emplace_front(file_name); // use emplace front not push front because it construct the object directly, while push is contruct then move or copy, double step.
         }
     }
 
