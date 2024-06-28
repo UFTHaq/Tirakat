@@ -1411,6 +1411,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
     }
 
     music_duration = data.at(music_play).duration;
+    //music_duration = static_cast<int>(GetMusicTimeLength(music) * 1000);
 
     if (p->reset_time == true) {
         SeekMusicStream(music, 0.1F);
@@ -1526,7 +1527,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         static bool repetition_saved = false;
         if (repetition_saved == false) {
 
-            if (music_time_now >= (music_duration - 100)) {
+            if (music_time_now >= (music_duration - 1)) {
             //if (GetMusicTimePlayed(music) >= (millisecondsToSeconds(music_duration) - 0.05F)) {
 
                 if (time_played >= threshold_80) {
@@ -2499,8 +2500,8 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                             DetachAudioStreamProcessor(music.stream, callback);
                             ResetVisualizerParameter();
 
-                            // Reset music_time sebelum pindah lagu biar tidak overflow ke lagu selanjutnya
-                            music_time_now = 100; // milliseconds
+                            // Reset music_time_now sebelum pindah lagu biar tidak overflow ke lagu selanjutnya
+                            music_time_now = 1; // milliseconds
 
                             music_play = i;
                             music = LoadMusicStream(data.at(music_play).path.c_str());
@@ -2692,96 +2693,107 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
         DrawTextEx(*font, text, text_coor, font_size, font_space, color_font);
 
 
-        if (p->option_status == ON) {
+        if (p->option_status == ON) 
+        {
 
             static float time_down = {};
             float dt = GetFrameTime();
 
             if (i == p->option_music_order) {
-                float option_panel_width = content.width * 0.325F;
-                Rectangle option_panel{
-                    content.x + content.width - option_panel_width,
-                    content.y,
-                    option_panel_width,
-                    content.height
-                };
-                DrawRectangleRounded(option_panel, 0.2F, 10, LIGHTGRAY);
-                float btn_base_width = option_panel_width * 0.85F;
-                Rectangle btn_base{
-                    option_panel.x + (option_panel.width - btn_base_width) / 2,
-                    option_panel.y,
-                    btn_base_width,
-                    option_panel.height
-                };
-                //DrawRectangleRec(btn_base, GRAY);
+                bool special_author = true;
+                std::string author_lower = "author";
+                std::string subtring_name_lower = cpp_text;
+                std::transform(subtring_name_lower.begin(), subtring_name_lower.end(), subtring_name_lower.begin(), tolower);
+                size_t found = subtring_name_lower.find(author_lower);
 
-                float btn_width = btn_base_width * 0.475F;
-                float y_pos = btn_base.y;
-                if (btn_width < btn_base.height) {
-                    float pad = btn_base.height - btn_width;
-                    y_pos = btn_base.y + (pad / 2);
-                }
-                else btn_width = btn_base.height;
+                if (found == std::string::npos) {
 
-                Rectangle setting_btn{
-                    btn_base.x,
-                    y_pos,
-                    btn_width,
-                    btn_width
-                };
-                Rectangle delete_btn{
-                    btn_base.x + btn_base_width - btn_width,
-                    y_pos,
-                    btn_width,
-                    btn_width
-                };
+                    float option_panel_width = content.width * 0.325F;
+                    Rectangle option_panel{
+                        content.x + content.width - option_panel_width,
+                        content.y,
+                        option_panel_width,
+                        content.height
+                    };
+                    DrawRectangleRounded(option_panel, 0.2F, 10, LIGHTGRAY);
+                    float btn_base_width = option_panel_width * 0.85F;
+                    Rectangle btn_base{
+                        option_panel.x + (option_panel.width - btn_base_width) / 2,
+                        option_panel.y,
+                        btn_base_width,
+                        option_panel.height
+                    };
+                    //DrawRectangleRec(btn_base, GRAY);
+
+                    float btn_width = btn_base_width * 0.475F;
+                    float y_pos = btn_base.y;
+                    if (btn_width < btn_base.height) {
+                        float pad = btn_base.height - btn_width;
+                        y_pos = btn_base.y + (pad / 2);
+                    }
+                    else btn_width = btn_base.height;
+
+                    Rectangle setting_btn{
+                        btn_base.x,
+                        y_pos,
+                        btn_width,
+                        btn_width
+                    };
+                    Rectangle delete_btn{
+                        btn_base.x + btn_base_width - btn_width,
+                        y_pos,
+                        btn_width,
+                        btn_width
+                    };
 
 
-                if (CheckCollisionPointRec(mouse_position, setting_btn)) {
-                    DrawRectangleRounded(setting_btn, 0.2F, 10, Fade(WHITE, 0.75F));
-                }
+                    if (CheckCollisionPointRec(mouse_position, setting_btn)) {
+                        DrawRectangleRounded(setting_btn, 0.2F, 10, Fade(WHITE, 0.75F));
+                    }
 
-                if (CheckCollisionPointRec(mouse_position, delete_btn)) {
-                    DrawRectangleRounded(delete_btn, 0.2F, 10, Fade(WHITE, 0.75F));
-                }
+                    if (CheckCollisionPointRec(mouse_position, delete_btn)) {
+                        DrawRectangleRounded(delete_btn, 0.2F, 10, Fade(WHITE, 0.75F));
+                    }
 
 
-                // DRAW SETTING ICON
-                {
-                    float icon_size = 100.0F;
-                    Rectangle dest = setting_btn;
-                    Rectangle source = { 0, 0, icon_size, icon_size };
-                    DrawTexturePro(SETTING_TEX, source, dest, { 0,0 }, 0, BLACK);
-                }
+                    // DRAW SETTING ICON
+                    {
+                        float icon_size = 100.0F;
+                        Rectangle dest = setting_btn;
+                        Rectangle source = { 0, 0, icon_size, icon_size };
+                        DrawTexturePro(SETTING_TEX, source, dest, { 0,0 }, 0, BLACK);
+                    }
                 
-                // DRAW DELETE ICON
-                {
-                    float icon_size = 100.0F;
-                    Rectangle dest = delete_btn;
-                    Rectangle source = { 0, 0, icon_size, icon_size };
-                    DrawTexturePro(DELETE_TEX, source, dest, { 0,0 }, 0, color_content);
+                    // DRAW DELETE ICON
+                    {
+                        float icon_size = 100.0F;
+                        Rectangle dest = delete_btn;
+                        Rectangle source = { 0, 0, icon_size, icon_size };
+                        DrawTexturePro(DELETE_TEX, source, dest, { 0,0 }, 0, color_content);
+                    }
+
+
+                    if (CheckCollisionPointRec(mouse_position, setting_btn)) {
+                        time_down = 0.5;
+                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                            p->popup_on = ON;
+                        }
+                    } 
+
+                    if (CheckCollisionPointRec(mouse_position, delete_btn)) {
+                        time_down = 0.5F;
+                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+
+                            DeleteMusic(retFlag, p->option_music_order);
+                            p->option_status = OFF;
+
+                        }
+                    }
+
+                    special_btn_setting = { ON, setting_btn };
+                    special_btn_delete = { ON, delete_btn };
                 }
 
-
-                if (CheckCollisionPointRec(mouse_position, setting_btn)) {
-                    time_down = 0.5;
-                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                        p->popup_on = ON;
-                    }
-                } 
-
-                if (CheckCollisionPointRec(mouse_position, delete_btn)) {
-                    time_down = 0.5F;
-                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-
-                        DeleteMusic(retFlag, p->option_music_order);
-                        p->option_status = OFF;
-
-                    }
-                }
-
-                special_btn_setting = { ON, setting_btn };
-                special_btn_delete = { ON, delete_btn };
             }
 
             if (time_down >= 0.0F) time_down -= dt;
