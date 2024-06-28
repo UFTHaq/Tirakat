@@ -238,6 +238,7 @@ struct ErrorPopup {
     std::string name{};
     float time{ 0.0F };
     float alpha{ 1.0F };
+    float slide_up{ 0.0F };
 
     ErrorPopup(const std::string& name) : name(name) {}
 
@@ -253,10 +254,21 @@ struct ErrorPopup {
         }
     }
 
+    void updateSlideUP() {
+        if (slide_up < 1.0F) slide_up += 0.05F;
+    }
+
     void updateAll() {
         updateTime();
         updateAlpha();
+        updateSlideUP();
     }
+
+    void resetSlideUp() {
+        slide_up = 0.0F;
+    }
+
+    float getSlideUp() { return slide_up; }
 
     bool isExpired() const {
         return alpha <= 0.0F;
@@ -1168,9 +1180,10 @@ void DrawErrorPopupTray()
             float error_popup_h = 60;
             float space = 15;
             float alpha = error.alpha;
+            float coef_moving = sqrtf(error.getSlideUp());
             Rectangle error_popup_rect{
                 screen.w - error_popup_w - space,
-                screen.h - error_popup_h - space - (i * (error_popup_h + space)),
+                screen.h - 0 - space - (coef_moving * error_popup_h) - (i * (error_popup_h + space)),
                 error_popup_w,
                 error_popup_h
             };
@@ -4227,6 +4240,7 @@ void LoadMP3()
         else {
             TraceLog(LOG_ERROR, "Failed adding new file, only support mp3/wav/flac/ogg files");
             p->ErrorDragDropPopupTray.emplace_front(file_name); // use emplace front not push front because it construct the object directly, while push is contruct then move or copy, double step.
+            for (auto& i : p->ErrorDragDropPopupTray) i.resetSlideUp();
         }
     }
 
