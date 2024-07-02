@@ -312,7 +312,7 @@ struct Plug {
     //const int spectrogram_h{ static_cast<int>((1 << 9)) };
     const int spectrogram_h{ static_cast<int>((N / 2)) };
     //const int spectrogram_w{ (1 << 9) * 16 / 9 };
-    const int spectrogram_w{ 640 };
+    const int spectrogram_w{ 860 };
     Image spectrogram_image{};
     Texture2D SPECTROGRAM_TEXTURE{};
     const int spectrogram_zone_out_w{ 255 };
@@ -704,23 +704,30 @@ Color SpectrogramColor(float normalizedValue) {
     }
     else if (normalizedValue > 0.45f) {
         // Yellow
-        red = 235.0f;
-        green = 245.0f;
-        blue = 120.0f;
-        alpha = 150.0f;
+        red = 225.0f;
+        green = 235.0f;
+        blue = 140.0f;
+        alpha = 200.0f;
     }
+    //else if (normalizedValue > 0.35f) {
+    //    // Orange
+    //    red = 218.0f;
+    //    green = 165.0f;
+    //    blue = 90.0f;
+    //    alpha = 150.0F;
+    //}
     else if (normalizedValue > 0.35f) {
         // Orange
-        red = 235.0f;
-        green = 165.0f;
-        blue = 90.0f;
-        alpha = 150.0F;
+        red = 180.0f;
+        green = 160.0f;
+        blue = 130.0f;
+        alpha = 180.0F;
     }
     else if (normalizedValue > 0.25f) {
         // Pink
-        red = 100.0f;
-        green = 90.0f;
-        blue = 120.0f;
+        red = 110.0f;
+        green = 110.0f;
+        blue = 135.0f;
         alpha = 180.0F;
     }
     else if (normalizedValue > 0.15f) {
@@ -1005,7 +1012,8 @@ int main()
 
     InitWindow((int)screen.w, (int)screen.h, "Tirakat");
     InitAudioDevice();
-    SetTargetFPS(99);
+    SetTargetFPS(96);
+    //SetTargetFPS(60);
     SetWindowIcon(LoadImage(ICON_APP_LOC));
     //ToggleBorderlessWindowed();
     //SetWindowOpacity(0.75F);
@@ -1561,10 +1569,12 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
 
         // COUNTING REPETITION
         static bool repetition_saved = false;
-        if (repetition_saved == false) {
+        if (repetition_saved == false) { 
 
-            if (music_time_now >= (music_duration - 1)) {
+            if (music_time_now >= (music_duration - 10)) {
             //if (GetMusicTimePlayed(music) >= (millisecondsToSeconds(music_duration) - 0.05F)) {
+
+                PauseMusicStream(music);
 
                 if (time_played >= threshold_80) {
                     data.at(music_play).counter++;
@@ -1587,6 +1597,8 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
 
                     time_domain_signal = ExtractMusicData(data.at(music_play).path);
                 }
+
+                ResumeMusicStream(music);
 
                 p->reset_time = true;
                 repetition_saved = false;
