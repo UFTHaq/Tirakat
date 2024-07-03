@@ -207,6 +207,7 @@ enum MODE {
 };
 
 enum VisualModes {
+    WAVE,
     CLASSIC,
     GALAXY,
     LANDSCAPE,
@@ -224,10 +225,11 @@ struct VisualMode {
     bool enable{};
 };
 
-VisualMode visualM1{ "Classic"      , "V + 1", ON };
-VisualMode visualM2{ "Galaxy"       , "V + 2", ON };
-VisualMode visualM3{ "Landscape"    , "V + 3", ON };
-VisualMode visualM4{ "Spectogram"   , "V + 4", ON };
+VisualMode visualM1{ "Wave"         , "V + 1", ON };
+VisualMode visualM2{ "Classic"      , "V + 2", ON };
+VisualMode visualM3{ "Galaxy"       , "V + 3", ON };
+VisualMode visualM4{ "Landscape"    , "V + 4", ON };
+VisualMode visualM5{ "Spectogram"   , "V + 5", ON };
 
 struct Notification {
     std::string g_info{};
@@ -303,8 +305,9 @@ struct Plug {
     int option_status{ OFF };
     size_t option_music_order{};
     bool visual_mode_expand{ OFF };
-    std::vector<VisualMode> visualmode{visualM1, visualM2, visualM3, visualM4};
+    std::vector<VisualMode> visualmode{ visualM1, visualM2, visualM3, visualM4, visualM5 };
     size_t visual_mode_active{ SPECTROGRAM };
+    bool toggle_windowed_wave{ true };
     Notification notification{};
     float mouse_onscreen_timer{ HUD_TIMER_SECS };
     bool visual_time_domain_lock{ ON };
@@ -1085,9 +1088,6 @@ int main()
     p->circle = LoadShader(NULL, "resources/shaders/circle.fs");
     p->bubble = LoadShader(NULL, "resources/shaders/bubble.fs");
 
-    //auto spectrogram_data = std::make_unique<Color[]>(p->spectrogram_w * p->spectrogram_h);
-    //InitializedSpectrogram(spectrogram_data);
-
     InitializedSpectrogram();
     InitializedSpectrogramZoneOut();
 
@@ -1569,7 +1569,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
 
         // COUNTING REPETITION
         static bool repetition_saved = false;
-        if (repetition_saved == false) { 
+        if (repetition_saved == false) {
 
             if (music_time_now >= (music_duration - 10)) {
             //if (GetMusicTimePlayed(music) >= (millisecondsToSeconds(music_duration) - 0.05F)) {
@@ -2951,13 +2951,12 @@ void DeleteMusic(int& retFlag, size_t order)
                 FileZeroDataCheck(data_txt);
             }
         }
-
     }
+
     if (data.size() == 0) {
         p->page = PAGE_DRAG_DROP;
         zero_data = true;
         { retFlag = 2; return; };
-        //goto drag_drop_label;
     }
 
     if (music_play == order) {
@@ -3139,224 +3138,223 @@ void DrawMainDisplay(Rectangle& panel_main)
         out_smear.at(i) += (smoothedAmplitude.at(i) - out_smear.at(i)) * smearness * GetFrameTime();
     }
 
-    // JUST FOR DRAWING
-    for (size_t i = 0; i < BUCKETS; i++) {
-        float final_amplitude = smoothedAmplitude.at(i);
-        Vector2 coor = { normalization(float(i), 0.0F, (BUCKETS - 1)), (1 - final_amplitude * 0.7F) };
-        pointsArray_Norm_smart[i] = coor;
+    if (p->visual_mode_active == CLASSIC || p->visual_mode_active == GALAXY || p->visual_mode_active == LANDSCAPE) 
+    {
+        // JUST FOR DRAWING
+        for (size_t i = 0; i < BUCKETS; i++) {
+            float final_amplitude = smoothedAmplitude.at(i);
+            Vector2 coor = { normalization(float(i), 0.0F, (BUCKETS - 1)), (1 - final_amplitude * 0.7F) };
+            pointsArray_Norm_smart[i] = coor;
 
-        float bar_h = final_amplitude * panel_display.height * 0.65F;
-        //float bar_h = final_amplitude * panel_display.height * 0.9F;
-        float bar_w = panel_display.width / BUCKETS;
+            float bar_h = final_amplitude * panel_display.height * 0.65F;
+            //float bar_h = final_amplitude * panel_display.height * 0.9F;
+            float bar_w = panel_display.width / BUCKETS;
 
-        pad = bar_w * sqrtf(1 - final_amplitude) * 0.35F;
-        float base_h = bar_w * 0.7F;
-        Rectangle base = {
-            panel_display.x + (i * bar_w),
-            (panel_display.y + panel_display.height) - base_h * 1.5F,
-            bar_w,
-            base_h
-        };
+            pad = bar_w * sqrtf(1 - final_amplitude) * 0.35F;
+            float base_h = bar_w * 0.7F;
+            Rectangle base = {
+                panel_display.x + (i * bar_w),
+                (panel_display.y + panel_display.height) - base_h * 1.5F,
+                bar_w,
+                base_h
+            };
 
-        Rectangle bar = {
-            panel_display.x + (i * bar_w),
-            base.y + (base.height * 0.5F) - bar_h,
-            bar_w,
-            bar_h
-        };
+            Rectangle bar = {
+                panel_display.x + (i * bar_w),
+                base.y + (base.height * 0.5F) - bar_h,
+                bar_w,
+                bar_h
+            };
 
-        Color color{};
-        float hue = (float)i / BUCKETS * 0.9F;
-        float sat = 0.85F;
-        float val = 1.0F;
-        color = ColorFromHSV(hue * 360, sat, val);
-
-        
-        Vector2 startPos = { bar.x + bar.width / 2, (bar.y + bar.height) - bar_h };
-        Vector2 endPos = { bar.x + bar.width / 2, (bar.y + bar.height) };
-        float thick = 4.0F * sqrt(final_amplitude) * (bar_w * 0.10F);
+            Color color{};
+            float hue = (float)i / BUCKETS * 0.9F;
+            float sat = 0.85F;
+            float val = 1.0F;
+            color = ColorFromHSV(hue * 360, sat, val);
 
 
-        Vector2 center_bins = { bar.x + bar.width / 2, bar.y };
-        float radius = bar_w * sqrt(final_amplitude) * 1.25F * 2;
-        pointsArray_RealTime_smart[i] = center_bins;
+            Vector2 startPos = { bar.x + bar.width / 2, (bar.y + bar.height) - bar_h };
+            Vector2 endPos = { bar.x + bar.width / 2, (bar.y + bar.height) };
+            float thick = 4.0F * sqrt(final_amplitude) * (bar_w * 0.10F);
 
-        
-        if (p->visual_mode_active == CLASSIC) {
-            p->mode = MODE_MULTI_PEAK;
 
-            bar_h *= 1.25F;
-            startPos = { bar.x + bar.width / 2, (bar.y + bar.height) - bar_h };
-            endPos = { bar.x + bar.width / 2, (bar.y + bar.height) };
-            DrawLineEx(startPos, endPos, thick, color);
+            Vector2 center_bins = { bar.x + bar.width / 2, bar.y };
+            float radius = bar_w * sqrt(final_amplitude) * 1.25F * 2;
+            pointsArray_RealTime_smart[i] = center_bins;
 
-            // Maybe can used for toggle glow or bubble effect. not as default 
-            if (p->glow) {
-                // DRAW BUBBLE USING SHADERS
-                radius = bar_w * sqrt(final_amplitude) * 1.40F * 2;
-                BeginShaderMode(p->bubble);
-                Texture2D bubble_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
-                Vector2 bubble_pos = {
+
+            if (p->visual_mode_active == CLASSIC) {
+                p->mode = MODE_MULTI_PEAK;
+
+                bar_h *= 1.25F;
+                startPos = { bar.x + bar.width / 2, (bar.y + bar.height) - bar_h };
+                endPos = { bar.x + bar.width / 2, (bar.y + bar.height) };
+                DrawLineEx(startPos, endPos, thick, color);
+
+                // Maybe can used for toggle glow or bubble effect. not as default 
+                if (p->glow) {
+                    // DRAW BUBBLE USING SHADERS
+                    radius = bar_w * sqrt(final_amplitude) * 1.40F * 2;
+                    BeginShaderMode(p->bubble);
+                    Texture2D bubble_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+                    Vector2 bubble_pos = {
+                        startPos.x - radius,
+                        startPos.y - radius
+                    };
+                    float bubble_rotation = { 0 };
+                    float bubble_scale = radius * 2;
+                    DrawTextureEx(bubble_texture, bubble_pos, bubble_rotation, bubble_scale, Fade(RAYWHITE, 0.25F));
+                    EndShaderMode();
+                }
+
+                {
+                    // TRY SMEAR EFFECT
+                    Texture2D smear_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+
+                    BeginShaderMode(p->circle);
+                    float start = out_smear.at(i) * panel_display.height * 0.65F;;
+                    float end = bar_h;
+
+                    Vector2 start_pos = startPos;
+                    Vector2 end_pos = endPos;
+
+                    float radius = bar_w * sqrt(final_amplitude) * 2.F;
+                    Vector2 origin{};
+                    if (end_pos.y >= start_pos.y) {
+                        Rectangle dest{
+                            start_pos.x - radius / 2,
+                            start_pos.y,
+                            radius,
+                            end_pos.y - start_pos.y
+                        };
+                        Rectangle source{ 0, 0, 1, 0.5 };
+                        DrawTexturePro(smear_texture, source, dest, origin, 0, color);
+                    }
+                    else {
+                        Rectangle dest{
+                            end_pos.x - radius / 2,
+                            end_pos.y,
+                            radius,
+                            start_pos.y - end_pos.y
+                        };
+                        Rectangle source{ 0, 0.5, 1, 0.5 };
+                        DrawTexturePro(smear_texture, source, dest, origin, 0, color);
+                    }
+
+                    EndShaderMode();
+                }
+
+                // DRAW CIRCLE USING SHADERS
+                BeginShaderMode(p->circle);
+                Texture2D circle_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+                radius = bar_w * sqrt(final_amplitude) * 1.50F * 2;
+
+                // TOP CIRCLE
+                Vector2 top_pos = {
                     startPos.x - radius,
                     startPos.y - radius
                 };
-                float bubble_rotation = { 0 };
-                float bubble_scale = radius * 2;
-                DrawTextureEx(bubble_texture, bubble_pos, bubble_rotation, bubble_scale, Fade(RAYWHITE, 0.25F));
+                float rotation = { 0 };
+                float scale = radius * 2;
+                DrawTextureEx(circle_texture, top_pos, rotation, scale, color);
+
+                // BASE CIRCLE
+                radius = radius * 0.70F;
+                scale = radius * 2;
+                Vector2 base_pos = {
+                    endPos.x - radius,
+                    endPos.y - radius
+                };
+                DrawTextureEx(circle_texture, base_pos, rotation, scale, color);
                 EndShaderMode();
             }
 
-            {
-                // TRY SMEAR EFFECT
-                Texture2D smear_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+
+            if (p->visual_mode_active == GALAXY) {
+                p->mode = MODE_EXPONENTIAL;
 
                 BeginShaderMode(p->circle);
-                float start = out_smear.at(i) * panel_display.height * 0.65F;;
-                float end = bar_h;
-                //float end = endPos.y;
-                Vector2 start_pos = startPos;
-                Vector2 end_pos = endPos;
-                //Vector2 start_pos = endPos;
-                //Vector2 end_pos = startPos;
-                //Vector2 start_pos = { bar.x + bar.width / 2, panel_display.y + panel_display.height - start };
-                //Vector2 end_pos = { bar.x + bar.width / 2, panel_display.y + panel_display.height - end };
+                Texture2D circle_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
 
-                float radius = bar_w * sqrt(final_amplitude) * 2.F;
-                Vector2 origin{};
-                if (end_pos.y >= start_pos.y) {
-                    Rectangle dest{
-                        start_pos.x - radius / 2,
-                        start_pos.y,
-                        radius,
-                        end_pos.y - start_pos.y
-                    };
-                    Rectangle source{ 0, 0, 1, 0.5 };
-                    DrawTexturePro(smear_texture, source, dest, origin, 0, color);
-                }
-                else {
-                    Rectangle dest{
-                        end_pos.x - radius / 2,
-                        end_pos.y,
-                        radius,
-                        start_pos.y - end_pos.y
-                    };
-                    Rectangle source{ 0, 0.5, 1, 0.5 };
-                    DrawTexturePro(smear_texture, source, dest, origin, 0, color);
-                }
+                float rotation = { 0 };
 
+                // NEW FFT ROTATION STYLE, USE LINE AND SHADERS
+                color = ColorFromHSV(hue * 360 + GetFrameTime(), sat, val);
+                Vector2 center_panel_main{
+                    panel_display.x + (panel_display.width * 0.5F),
+                    panel_display.y + (panel_display.height * 0.58F)
+                };
+
+                float value = sqrt(final_amplitude) * panel_display.height * 0.42F;
+                float angle = (360.0F / 50.0F) * i;
+                //float angle = 0.5F * (float)i;
+                Vector2 startPos_fft_rotation = center_panel_main;
+
+                Vector2 endPos_fft_rotation = {
+                    startPos_fft_rotation.x + (sin(angle) * value),
+                    startPos_fft_rotation.y + (cos(angle) * value)
+                };
+
+                Vector2 Pos_40 = {
+                    startPos_fft_rotation.x + (sin(angle) * value) * 0.4F,
+                    startPos_fft_rotation.y + (cos(angle) * value) * 0.4F
+                };
+                Vector2 Pos_70 = {
+                    startPos_fft_rotation.x + (sin(angle) * value) * 0.7F,
+                    startPos_fft_rotation.y + (cos(angle) * value) * 0.7F
+                };
+                Vector2 Pos_90 = {
+                    startPos_fft_rotation.x + (sin(angle) * value) * 0.9F,
+                    startPos_fft_rotation.y + (cos(angle) * value) * 0.9F
+                };
+                Vector2 Pos_100 = {
+                    startPos_fft_rotation.x + (sin(angle) * value) * 0.9F,
+                    startPos_fft_rotation.y + (cos(angle) * value) * 0.9F
+                };
+                //DrawLineEx(startPos_fft_rotation, endPos_fft_rotation, 2.0, color);
+
+                {
+                    float radius_40 = sqrt(value) * 1.25F;
+                    float scale = radius_40 * 2;
+                    Vector2 base_40_pos = {
+                        Pos_40.x - radius_40,
+                        Pos_40.y - radius_40,
+                    };
+                    DrawTextureEx(circle_texture, base_40_pos, rotation, scale, color);
+                    //DrawTextureEx(circle_texture, base_40_pos, rotation, scale, WHITE);
+
+                    //float radius_70 = value * 0.05F;
+                    float radius_70 = 2.50F;
+                    scale = radius_70 * 2;
+                    Vector2 base_70_pos = {
+                        Pos_70.x - radius_70,
+                        Pos_70.y - radius_70,
+                    };
+                    //DrawTextureEx(circle_texture, base_70_pos, rotation, scale, color);
+                    DrawTextureEx(circle_texture, base_70_pos, rotation, scale, WHITE);
+
+                    float radius_90 = value * 0.2F;
+                    scale = radius_90 * 2;
+                    Vector2 base_90_pos = {
+                        Pos_90.x - radius_90,
+                        Pos_90.y - radius_90,
+                    };
+                    //DrawTextureEx(circle_texture, base_90_pos, rotation, scale, color);
+
+                    float radius_100 = sqrt(value) * 0.75F;
+                    scale = radius_100 * 2;
+                    Vector2 base_100_pos = {
+                        Pos_100.x - radius_100,
+                        Pos_100.y - radius_100,
+                    };
+                    DrawTextureEx(circle_texture, base_100_pos, rotation, scale, color);
+                    //DrawTextureEx(circle_texture, base_100_pos, rotation, scale, WHITE);
+
+                }
                 EndShaderMode();
             }
 
-            // DRAW CIRCLE USING SHADERS
-            BeginShaderMode(p->circle);
-            Texture2D circle_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
-            radius = bar_w * sqrt(final_amplitude) * 1.50F * 2;
-
-            // TOP CIRCLE
-            Vector2 top_pos = {
-                startPos.x - radius,
-                startPos.y - radius
-            };
-            float rotation = { 0 };
-            float scale = radius * 2;
-            DrawTextureEx(circle_texture, top_pos, rotation, scale, color);
-
-            // BASE CIRCLE
-            radius = radius * 0.70F;
-            scale = radius * 2;
-            Vector2 base_pos = {
-                endPos.x - radius,
-                endPos.y - radius
-            };
-            DrawTextureEx(circle_texture, base_pos, rotation, scale, color);
-            EndShaderMode();
         }
-        
-        
-        if (p->visual_mode_active == GALAXY) {
-            p->mode = MODE_EXPONENTIAL;
-
-            BeginShaderMode(p->circle);
-            Texture2D circle_texture = { rlGetTextureIdDefault(), 1,1,1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
-
-            float rotation = { 0 };
-
-            // NEW FFT ROTATION STYLE, USE LINE AND SHADERS
-            color = ColorFromHSV(hue * 360 + GetFrameTime(), sat, val);
-            Vector2 center_panel_main{
-                panel_display.x + (panel_display.width * 0.5F),
-                panel_display.y + (panel_display.height * 0.58F)
-            };
-
-            float value = sqrt(final_amplitude) * panel_display.height * 0.42F;
-            float angle = (360.0F / 50.0F) * i;
-            //float angle = 0.5F * (float)i;
-            Vector2 startPos_fft_rotation = center_panel_main;
-
-            Vector2 endPos_fft_rotation = {
-                startPos_fft_rotation.x + (sin(angle) * value),
-                startPos_fft_rotation.y + (cos(angle) * value)
-            };
-
-            Vector2 Pos_40 = {
-                startPos_fft_rotation.x + (sin(angle) * value) * 0.4F,
-                startPos_fft_rotation.y + (cos(angle) * value) * 0.4F
-            };
-            Vector2 Pos_70 = {
-                startPos_fft_rotation.x + (sin(angle) * value) * 0.7F,
-                startPos_fft_rotation.y + (cos(angle) * value) * 0.7F
-            };
-            Vector2 Pos_90 = {
-                startPos_fft_rotation.x + (sin(angle) * value) * 0.9F,
-                startPos_fft_rotation.y + (cos(angle) * value) * 0.9F
-            };
-            Vector2 Pos_100 = {
-                startPos_fft_rotation.x + (sin(angle) * value) * 0.9F,
-                startPos_fft_rotation.y + (cos(angle) * value) * 0.9F
-            };
-            //DrawLineEx(startPos_fft_rotation, endPos_fft_rotation, 2.0, color);
-
-            {
-                float radius_40 = sqrt(value) * 1.25F;
-                float scale = radius_40 * 2;
-                Vector2 base_40_pos = {
-                    Pos_40.x - radius_40,
-                    Pos_40.y - radius_40,
-                };
-                DrawTextureEx(circle_texture, base_40_pos, rotation, scale, color);
-                //DrawTextureEx(circle_texture, base_40_pos, rotation, scale, WHITE);
-
-                //float radius_70 = value * 0.05F;
-                float radius_70 = 2.50F;
-                scale = radius_70 * 2;
-                Vector2 base_70_pos = {
-                    Pos_70.x - radius_70,
-                    Pos_70.y - radius_70,
-                };
-                //DrawTextureEx(circle_texture, base_70_pos, rotation, scale, color);
-                DrawTextureEx(circle_texture, base_70_pos, rotation, scale, WHITE);
-
-                float radius_90 = value * 0.2F;
-                scale = radius_90 * 2;
-                Vector2 base_90_pos = {
-                    Pos_90.x - radius_90,
-                    Pos_90.y - radius_90,
-                };
-                //DrawTextureEx(circle_texture, base_90_pos, rotation, scale, color);
-
-                float radius_100 = sqrt(value) * 0.75F;
-                scale = radius_100 * 2;
-                Vector2 base_100_pos = {
-                    Pos_100.x - radius_100,
-                    Pos_100.y - radius_100,
-                };
-                DrawTextureEx(circle_texture, base_100_pos, rotation, scale, color);
-                //DrawTextureEx(circle_texture, base_100_pos, rotation, scale, WHITE);
-
-            }
-            EndShaderMode();
-        }
-
     }
 
     if (p->visual_mode_active == LANDSCAPE) {
@@ -3495,8 +3493,6 @@ void DrawMainDisplay(Rectangle& panel_main)
                 float real_num_spec = static_cast<float>(fftw_out[i][0]);
                 float imaginer_spec = static_cast<float>(fftw_out[i][1]);
                 float amplitude_spc = std::sqrt((real_num_spec * real_num_spec) + (imaginer_spec * imaginer_spec));
-                //float amplitude_spc = std::sqrt((real_num_spec * real_num_spec));
-                //float amplitude_spc = (real_num_spec);
                 min_amp_spec = std::min(min_amp_spec, amplitude_spc);
                 max_amp_spec = std::max(max_amp_spec, amplitude_spc);
             }
@@ -3517,12 +3513,7 @@ void DrawMainDisplay(Rectangle& panel_main)
                     if (amplitude_spc < 0.1F) amplitude_spc = 0.0F;
                     int inverse = p->spectrogram_h - static_cast<int>(y);
                     //spectrogram_data[y * p->spectrogram_w + (p->spectrogram_w - speed)] = interpolateColor(amplitude_spc); // Terbalik
-                    //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = InterpolateColor(amplitude_spc);
                     spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = SpectrogramColor(amplitude_spc);
-                    //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = ColorFromHSV((1 - amplitude_spc) * 180, 0.8F, 1);
-                    //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromValue(amplitude_spc);
-                    //spectrogram_data[inverse * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromAmplitude(amplitude_spc);
-                    //spectrogram_data[y * p->spectrogram_w + (p->spectrogram_w - speed)] = getColorFromAmplitude(amplitude_spc);
                 }
 
             }
@@ -3577,6 +3568,103 @@ void DrawMainDisplay(Rectangle& panel_main)
 
     }
 
+    if (p->visual_mode_active == WAVE) 
+    {
+        if (p->toggle_windowed_wave && p->music_playing) {
+            hann_window(wave_live.data(), wave_live.size());
+        }
+
+        float pad = panel_display.height * 0.2F;
+        Rectangle wave_live_signal_base
+        {
+            panel_display.x + (pad * 0.5F),
+            panel_display.y + (pad * 1.25F),
+            panel_display.width - (pad * 2 * 0.5F),
+            panel_display.height - (pad * 2 * 1.25F) + (pad * 0.5F)
+        };
+        //DrawRectangleLinesEx(wave_live_signal_base, 1.0F, YELLOW);
+
+        pad = wave_live_signal_base.height * 0.05F;
+        Rectangle wave_live_signal_rect
+        {
+            wave_live_signal_base.x,
+            wave_live_signal_base.y + (pad * 1),
+            wave_live_signal_base.width,
+            wave_live_signal_base.height - (pad * 2),
+        };
+        //DrawRectangleRec(wave_live_signal_rect, RAYWHITE);
+
+        float center_hor = wave_live_signal_rect.y + (wave_live_signal_rect.height / 2);
+        float point_width = wave_live_signal_rect.width / wave_live.size();
+        for (size_t i = 0; i < audio_wave_live.size(); i++) {
+            audio_wave_live.at(i) = {
+                wave_live_signal_rect.x + (point_width * i),
+                center_hor + (wave_live_signal_rect.height * wave_live.at(i)) * 0.4F,
+            };
+        }
+
+        DrawSplineLinear(audio_wave_live.data(), (int)wave_live.size(), 3.F, RAYWHITE);
+
+        static float alpha_coef{1.0f};
+        bool draw_icon = alpha_coef > 0.0F;
+        static float time_down{};
+
+        float toggle_btn_size = 50.0F;
+        Rectangle toggle_btn
+        {
+            wave_live_signal_base.x + (wave_live_signal_base.width - toggle_btn_size) / 2,
+            wave_live_signal_base.y,
+            toggle_btn_size,
+            toggle_btn_size
+        };
+
+        float pad_button = 35.0F;
+        Rectangle hover_area
+        {
+            toggle_btn.x - (pad_button * 1),
+            toggle_btn.y - (pad_button * 1),
+            toggle_btn.width + (pad_button * 2),
+            toggle_btn.height + (pad_button * 2),
+        };
+
+        if (CheckCollisionPointRec(mouse_position, hover_area)) {
+            if (alpha_coef <= 1.0F) {
+                alpha_coef += sqrtf(dt);
+                }
+            }
+        else {
+            if (alpha_coef >= 0.0F) {
+                alpha_coef -= sqrtf(dt) / 4;
+            }
+        }
+
+        DrawRectangleRounded(toggle_btn, 0.25F, 10, Fade(LIGHTGRAY, 0.10F * alpha_coef));
+
+        if (CheckCollisionPointRec(mouse_position, toggle_btn)) {
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                p->toggle_windowed_wave = !p->toggle_windowed_wave;
+            }
+
+            std::string info{};
+            if (p->toggle_windowed_wave) info = "Windowed Wave [W]";
+            else info = "Natural Wave [W]";
+            Tooltip(toggle_btn, font_visual_mode_child, screen, info);
+        }
+
+        Color color{};
+        if (p->toggle_windowed_wave) color = GREEN;
+        else color = MAROON;
+
+        Vector2 center{ toggle_btn.x + toggle_btn.width / 2, toggle_btn.y + toggle_btn.height / 2 };
+        DrawCircleLinesV(center, toggle_btn_size * 0.250F, Fade(color, alpha_coef));
+        DrawCircleLinesV(center, toggle_btn_size * 0.230F, Fade(color, alpha_coef));
+        DrawCircleLinesV(center, toggle_btn_size * 0.220F, Fade(color, alpha_coef));
+        DrawCircleLinesV(center, toggle_btn_size * 0.210F, Fade(color, alpha_coef));
+
+        if (IsKeyPressed(KEY_W)) p->toggle_windowed_wave = !p->toggle_windowed_wave;
+    }
+
+    if (p->visual_mode_active != WAVE)
     {
         if (p->music_playing) {
             hann_window(wave_live.data(), wave_live.size());
@@ -3601,23 +3689,6 @@ void DrawMainDisplay(Rectangle& panel_main)
             wave_live_signal_base.height - (pad * 2),
         };
         //DrawRectangleRec(wave_live_signal_rect, RAYWHITE);
-
-        float shrink_coef = 0.940F;
-        Rectangle shrink_data_audio{
-            wave_live_signal_base.x,
-            wave_live_signal_base.y,
-            wave_live_signal_base.width * shrink_coef,
-            wave_live_signal_base.height,
-        };
-        //DrawRectangleRec(shrink_data_audio, Fade(GREEN, 0.1F));
-
-        Rectangle empty_data_audio{
-            shrink_data_audio.x + shrink_data_audio.width,
-            shrink_data_audio.y,
-            wave_live_signal_base.width* (1 - shrink_coef),
-            shrink_data_audio.height
-        };
-        //DrawRectangleRec(empty_data_audio, Fade(RED, 0.1F));
 
         float center_hor = wave_live_signal_rect.y + (wave_live_signal_rect.height / 2);
         float point_width = wave_live_signal_rect.width / wave_live.size();
@@ -3941,16 +4012,21 @@ void DrawVisualModeButton(Rectangle& panel_main, float dt)
     
     // VISUAL MODE SHORTCUT KEY
     if (IsKeyDown(KEY_VISUAL_MODE) && IsKeyPressed(KEY_ONE)) {
+        if (p->visualmode.at(WAVE).enable == ON) {
+            p->visual_mode_active = WAVE;
+        }
+    }
+    else if (IsKeyDown(KEY_VISUAL_MODE) && IsKeyPressed(KEY_TWO)) {
         if (p->visualmode.at(CLASSIC).enable == ON) {
             p->visual_mode_active = CLASSIC;
         }
     }
-    else if (IsKeyDown(KEY_VISUAL_MODE) && IsKeyPressed(KEY_TWO)) {
+    else if (IsKeyDown(KEY_VISUAL_MODE) && IsKeyPressed(KEY_THREE)) {
         if (p->visualmode.at(GALAXY).enable == ON) {
             p->visual_mode_active = GALAXY;
         }
     }
-    else if (IsKeyDown(KEY_VISUAL_MODE) && IsKeyPressed(KEY_THREE)) {
+    else if (IsKeyDown(KEY_VISUAL_MODE) && IsKeyPressed(KEY_FOUR)) {
         if (p->visualmode.at(LANDSCAPE).enable == ON) {
             p->visual_mode_active = LANDSCAPE;
         }
@@ -4393,38 +4469,44 @@ void DrawDuration(Rectangle& panel_duration)
 
 void DrawCounter(Rectangle& panel)
 {
-    std::string counter = std::to_string(data.at(music_play).counter);
-    std::string target = std::to_string(data.at(music_play).target);
-    std::string cpp_text = counter + " / " + target;
+    if (!data.empty()) {
 
-    const char* text = cpp_text.c_str();
-    float font_size = 30.0F;
-    float font_space = 0.0F;
-    Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-    Vector2 text_coor{
-        panel.x + (panel.width - text_measure.x) / 2,
-        panel.y + (panel.height - text_measure.y) / 2
-    };
-    Color color = RAYWHITE;
-    Data data_check = data.at(music_play);
-    if (data_check.counter > data_check.target) {
-        color = Fade(TARGET_DONE_COLOR, 0.9F);
+        std::string counter = std::to_string(data.at(music_play).counter);
+        std::string target = std::to_string(data.at(music_play).target);
+        std::string cpp_text = counter + " / " + target;
+
+        const char* text = cpp_text.c_str();
+        float font_size = 30.0F;
+        float font_space = 0.0F;
+        Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+        Vector2 text_coor{
+            panel.x + (panel.width - text_measure.x) / 2,
+            panel.y + (panel.height - text_measure.y) / 2
+        };
+        Color color = RAYWHITE;
+        Data data_check = data.at(music_play);
+        if (data_check.counter > data_check.target) {
+            color = Fade(TARGET_DONE_COLOR, 0.9F);
+        }
+        //DrawTextEx(*font, text, text_coor, font_size, font_space, color);
     }
-    //DrawTextEx(*font, text, text_coor, font_size, font_space, color);
 }
 
 void DrawTitleMP3(Rectangle& panel)
 {
-    std::string cpp_text = data.at(music_play).name;
-    const char* text = cpp_text.c_str();
-    float font_size = 32.0F;
-    float font_space = 0.0F;
-    Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-    Vector2 text_coor{
-        panel.x + (panel.width - text_measure.x) / 2,
-        panel.y + (panel.height - text_measure.y) / 2
-    };
-    DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
+    if (!data.empty()) {
+
+        std::string cpp_text = data.at(music_play).name;
+        const char* text = cpp_text.c_str();
+        float font_size = 32.0F;
+        float font_space = 0.0F;
+        Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+        Vector2 text_coor{
+            panel.x + (panel.width - text_measure.x) / 2,
+            panel.y + (panel.height - text_measure.y) / 2
+        };
+        DrawTextEx(*font, text, text_coor, font_size, font_space, RAYWHITE);
+    }
 }
 
 void ReloadVector()
