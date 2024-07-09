@@ -219,6 +219,12 @@ enum TrimString {
     BOLD
 };
 
+enum PopupTrayLOG {
+    FAILED,
+    SUCCESS,
+    DELETE,
+};
+
 struct VisualMode {
     std::string title{};
     std::string shortcut{};
@@ -238,12 +244,12 @@ struct Notification {
 
 struct DragDropPopup {
     std::string name{};
-    bool info{};
+    int info{};
     float time{ 0.0F };
     float alpha{ 1.0F };
     float slide_up{ 0.0F };
 
-    DragDropPopup(const std::string& name, const bool info) : name(name), info(info) {}
+    DragDropPopup(const std::string& name, const int info) : name(name), info(info) {}
 
     void updateTime() {
         time += GetFrameTime();
@@ -273,7 +279,7 @@ struct DragDropPopup {
 
     float getSlideUp() { return slide_up; }
 
-    bool getInfo() { return info; }
+    int getInfo() { return info; }
 
     bool isExpired() const {
         return alpha <= 0.0F;
@@ -316,6 +322,7 @@ struct Plug {
     const int spectrogram_h{ static_cast<int>((N / 2)) };
     //const int spectrogram_w{ (1 << 9) * 16 / 9 };
     const int spectrogram_w{ 860 };
+    //const int spectrogram_w{ 800 };
     Image spectrogram_image{};
     Texture2D SPECTROGRAM_TEXTURE{};
     const int spectrogram_zone_out_w{ 255 };
@@ -1015,7 +1022,7 @@ int main()
 
     InitWindow((int)screen.w, (int)screen.h, "Tirakat");
     InitAudioDevice();
-    SetTargetFPS(96);
+    SetTargetFPS(99);
     //SetTargetFPS(60);
     SetWindowIcon(LoadImage(ICON_APP_LOC));
     //ToggleBorderlessWindowed();
@@ -1187,7 +1194,7 @@ void DrawDragDropPopupTray()
 
             tray.updateAll();
 
-            float popup_w = 225;
+            float popup_w = 275;
             float popup_h = 60;
             float space = 15;
             float alpha = tray.alpha;
@@ -1198,11 +1205,12 @@ void DrawDragDropPopupTray()
                 popup_w,
                 popup_h
             };
-            Color color_bg = (tray.getInfo() == true) ? DARKGREEN : RED;
-            DrawRectangleRounded(popup_rect, 0.2F, 10, Fade(color_bg, alpha));
 
-            if (tray.getInfo())
+            if (tray.getInfo() == SUCCESS)
             {
+                Color color_bg = DARKGREEN;
+                DrawRectangleRounded(popup_rect, 0.2F, 10, Fade(color_bg, alpha));
+
                 // Draw Text
                 font = &font_s_reg;
                 Color font_color = WHITE;
@@ -1210,7 +1218,7 @@ void DrawDragDropPopupTray()
                 // trim text_cpp sesuai dengan space
                 float font_size = popup_rect.height * 0.5F;
                 float font_space = 0.0F;
-                float width_text = popup_rect.width * 0.9F;
+                float width_text = popup_rect.width * 0.92F;
                 text_cpp = TrimDisplayString(text_cpp, width_text, font_size, font_space, EASY);
                 const char* text = text_cpp.c_str();
                 Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
@@ -1220,16 +1228,41 @@ void DrawDragDropPopupTray()
                 };
                 DrawTextEx(*font, text, text_coor, font_size, font_space, Fade(font_color, alpha));
             }
-            else
+            else if (tray.getInfo() == FAILED)
             {
+                Color color_bg = RED;
+                DrawRectangleRounded(popup_rect, 0.2F, 10, Fade(color_bg, alpha));
+
                 // Draw Text
                 font = &font_s_reg;
                 Color font_color = WHITE;
-                std::string text_cpp = "Could not load \"" + tray.name + "\"";
+                std::string text_cpp = "Couldn't load \"" + tray.name + "\"";
                 // trim text_cpp sesuai dengan space
                 float font_size = popup_rect.height * 0.5F;
                 float font_space = 0.0F;
-                float width_text = popup_rect.width * 0.9F;
+                float width_text = popup_rect.width * 0.92F;
+                text_cpp = TrimDisplayString(text_cpp, width_text, font_size, font_space, EASY);
+                const char* text = text_cpp.c_str();
+                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+                Vector2 text_coor{
+                    popup_rect.x + (popup_rect.width - text_measure.x) / 2,
+                    popup_rect.y + (popup_rect.height - text_measure.y) / 2
+                };
+                DrawTextEx(*font, text, text_coor, font_size, font_space, Fade(font_color, alpha));
+            }
+            else if (tray.getInfo() == DELETE)
+            {
+                Color color_bg = DARKBROWN;
+                DrawRectangleRounded(popup_rect, 0.2F, 10, Fade(color_bg, alpha));
+
+                // Draw Text
+                font = &font_s_reg;
+                Color font_color = WHITE;
+                std::string text_cpp = "Deleting \"" + tray.name + "\"";
+                // trim text_cpp sesuai dengan space
+                float font_size = popup_rect.height * 0.5F;
+                float font_space = 0.0F;
+                float width_text = popup_rect.width * 0.92F;
                 text_cpp = TrimDisplayString(text_cpp, width_text, font_size, font_space, EASY);
                 const char* text = text_cpp.c_str();
                 Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
@@ -2934,6 +2967,9 @@ std::string TrimDisplayString(std::string& cpp_text, float text_width_limit, flo
 void DeleteMusic(int& retFlag, size_t order)
 {
     if (order >= 0 && order < data.size()) {
+        p->DragDropPopupTray.emplace_front(data.at(order).name, DELETE); // use emplace front not push front because it construct the object directly, while push is contruct then move or copy, double step.
+        for (auto& i : p->DragDropPopupTray) i.resetSlideUp();
+
         data.erase(data.begin() + order);
 
         if (music_play > order) {
@@ -3029,16 +3065,16 @@ void DrawMainDisplay(Rectangle& panel_main)
 
 
     if (IsKeyPressed(KEY_ONE)) {
-        p->mode = MODE_NATURAL;
+        //p->mode = MODE_NATURAL;
     }
     else if (IsKeyPressed(KEY_TWO)) {
-        p->mode = MODE_EXPONENTIAL;
+        //p->mode = MODE_EXPONENTIAL;
     }
     else if (IsKeyPressed(KEY_THREE)) {
-        p->mode = MODE_MULTI_PEAK;
+        //p->mode = MODE_MULTI_PEAK;
     }
     else if (IsKeyPressed(KEY_FOUR)) {
-        p->mode = MODE_MAX_PEAK;
+        //p->mode = MODE_MAX_PEAK;
     }
     else if (IsKeyPressed(KEY_G)) {
         p->glow = !p->glow;
@@ -4031,7 +4067,7 @@ void DrawVisualModeButton(Rectangle& panel_main, float dt)
             p->visual_mode_active = LANDSCAPE;
         }
     }
-    else if (IsKeyDown(KEY_VISUAL_MODE) && IsKeyPressed(KEY_FOUR)) {
+    else if (IsKeyDown(KEY_VISUAL_MODE) && IsKeyPressed(KEY_FIVE)) {
         if (p->visualmode.at(SPECTROGRAM).enable == ON) {
             p->visual_mode_active = SPECTROGRAM;
         }
@@ -4316,11 +4352,13 @@ void LoadMP3()
         const char* c_file_path = dropped_files.paths[i];
         std::string cpp_file_path = std::string(c_file_path);
         std::string file_name = std::filesystem::path(cpp_file_path).stem().string();
-        //std::string file_extension = std::filesystem::path(cpp_file_path).extension().string();
+        std::string file_extension = std::filesystem::path(cpp_file_path).extension().string();
 
         if (IsFileExtension(c_file_path, ".mp3") || IsFileExtension(c_file_path, ".wav") || IsFileExtension(c_file_path, ".flac") || IsFileExtension(c_file_path, ".ogg")) {
-            TraceLog(LOG_INFO, "SUCCESS: Adding new file [ %s ]", cpp_file_path.c_str());
-            p->DragDropPopupTray.emplace_front(file_name, true);
+            //TraceLog(LOG_INFO, "SUCCESS: Adding new file [ %s ]", cpp_file_path.c_str());
+            std::string loadInfo = "[SUCCESS] Load new file [ " + cpp_file_path + " ]";
+            TraceLog(LOG_INFO, loadInfo.c_str());
+            p->DragDropPopupTray.emplace_front(file_name + file_extension, SUCCESS);
             for (auto& i : p->DragDropPopupTray) i.resetSlideUp();
 
             Data newData{};
@@ -4346,13 +4384,15 @@ void LoadMP3()
                 zero_data = false;
             }
             else {
-                TraceLog(LOG_ERROR, "Failed to save [%s]", file_name.c_str());
+                TraceLog(LOG_ERROR, "[FAILED] to save [%s]", file_name.c_str());
             }
 
         }
         else {
-            TraceLog(LOG_ERROR, "Failed adding new file, only support mp3/wav/flac/ogg files");
-            p->DragDropPopupTray.emplace_front(file_name, false); // use emplace front not push front because it construct the object directly, while push is contruct then move or copy, double step.
+            //TraceLog(LOG_ERROR, "Failed adding new file, only support mp3/wav/flac/ogg files");
+            std::string loadInfo = "[FAILED] Couldn't load [ " + cpp_file_path + " ], only support mp3/wav/flac/ogg format";
+            TraceLog(LOG_INFO, loadInfo.c_str());
+            p->DragDropPopupTray.emplace_front(file_name + file_extension, FAILED); // use emplace front not push front because it construct the object directly, while push is contruct then move or copy, double step.
             for (auto& i : p->DragDropPopupTray) i.resetSlideUp();
         }
     }
