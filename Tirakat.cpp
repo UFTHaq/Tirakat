@@ -138,6 +138,7 @@
 #define ICON_MODE_LOC       {"resources/Icons/Mode.png"}
 #define ICON_POINTER_LOC    {"resources/Icons/Pointer.png"}
 #define ICON_LOCK_LOC       {"resources/Icons/Lock.png"}
+#define ICON_TOGGLE_LOC     {"resources/Icons/Toggle.png"}
 
 #define HUD_TIMER_SECS                              1.5F
 #define PANEL_LEFT_WIDTH                            275.0F
@@ -321,8 +322,9 @@ struct Plug {
     //const int spectrogram_h{ static_cast<int>((1 << 9)) };
     const int spectrogram_h{ static_cast<int>((N / 2)) };
     //const int spectrogram_w{ (1 << 9) * 16 / 9 };
-    const int spectrogram_w{ 860 };
-    //const int spectrogram_w{ 800 };
+    //const int spectrogram_w{ 860 };   // for 99 FPS
+    //const int spectrogram_w{ 640 };
+    const int spectrogram_w{ 700 };     // for 75 FPS
     Image spectrogram_image{};
     Texture2D SPECTROGRAM_TEXTURE{};
     const int spectrogram_zone_out_w{ 255 };
@@ -331,6 +333,7 @@ struct Plug {
     Image spectrogram_zone_in_image{};
     Texture2D SPECTROGRAM_ZONE_IN_TEXTURE{};
     std::deque<DragDropPopup> DragDropPopupTray{};
+    bool drawMiniWave{ ON };
 };
 
 Plug tirakat{};
@@ -952,16 +955,17 @@ Font font_counter{};
 Font font_visual_mode{};
 Font font_visual_mode_child{};
 
-Texture2D TIRAKAT_ICON_TEX{};
-Texture2D PLAYPAUSE_TEX{};
-Texture2D FULLSCREEN_TEX{};
-Texture2D VOLUME_TEX{};
-Texture2D SETTING_TEX{};
-Texture2D DELETE_TEX{};
-Texture2D X_TEX{};
-Texture2D MODE_TEX{};
-Texture2D POINTER_TEX{};
-Texture2D LOCK_TEX{};
+Texture2D TEX_TIRAKAT{};
+Texture2D TEX_PLAYPAUSE{};
+Texture2D TEX_FULLSCREEN{};
+Texture2D TEX_VOLUME{};
+Texture2D TEX_SETTING{};
+Texture2D TEX_DELETE{};
+Texture2D TEX_EXIT{};
+Texture2D TEX_MODE{};
+Texture2D TEX_POINTER{};
+Texture2D TEX_LOCK{};
+Texture2D TEX_TOGGLE{};
 
 std::ostringstream formatted_duration{};
 std::ostringstream formatted_progress{};
@@ -1016,14 +1020,13 @@ int main()
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_ALWAYS_RUN);
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     //SetConfigFlags(FLAG_WINDOW_UNDECORATED);
-    //SetConfigFlags(FLAG_VSYNC_HINT);
     //SetConfigFlags(FLAG_WINDOW_TRANSPARENT);
     //SetConfigFlags(FLAG_WINDOW_MOUSE_PASSTHROUGH);
 
     InitWindow((int)screen.w, (int)screen.h, "Tirakat");
     InitAudioDevice();
-    SetTargetFPS(99);
-    //SetTargetFPS(60);
+    //SetTargetFPS(99);
+    SetTargetFPS(75);
     SetWindowIcon(LoadImage(ICON_APP_LOC));
     //ToggleBorderlessWindowed();
     //SetWindowOpacity(0.75F);
@@ -1052,45 +1055,38 @@ int main()
     font_visual_mode_child = LoadFontEx(FONT_LOC_Sofia_Sans_Condensed_REG, 60, 0, 0);
     SetTextureFilter(font_visual_mode_child.texture, RL_TEXTURE_FILTER_BILINEAR);
 
-    Image tirakat_icon = LoadImage(ICON_APP_LOC);
-    TIRAKAT_ICON_TEX = LoadTextureFromImage(tirakat_icon);
-    SetTextureFilter(TIRAKAT_ICON_TEX, TEXTURE_FILTER_BILINEAR);
+    TEX_TIRAKAT = LoadTexture(ICON_APP_LOC);
+    SetTextureFilter(TEX_TIRAKAT, TEXTURE_FILTER_BILINEAR);
 
-    Image play_pause_icon = LoadImage(ICON_PLAYPAUSE_LOC);
-    PLAYPAUSE_TEX = LoadTextureFromImage(play_pause_icon);
-    SetTextureFilter(PLAYPAUSE_TEX, TEXTURE_FILTER_BILINEAR);
+    TEX_PLAYPAUSE = LoadTexture(ICON_PLAYPAUSE_LOC);
+    SetTextureFilter(TEX_PLAYPAUSE, TEXTURE_FILTER_BILINEAR);
 
-    Image fullscreen_icon = LoadImage(ICON_FULLSCREEN_LOC);
-    FULLSCREEN_TEX = LoadTextureFromImage(fullscreen_icon);
-    SetTextureFilter(FULLSCREEN_TEX, TEXTURE_FILTER_BILINEAR);
+    TEX_FULLSCREEN = LoadTexture(ICON_FULLSCREEN_LOC);
+    SetTextureFilter(TEX_FULLSCREEN, TEXTURE_FILTER_BILINEAR);
 
-    Image volume_icon = LoadImage(ICON_VOLUME_LOC);
-    VOLUME_TEX = LoadTextureFromImage(volume_icon);
-    SetTextureFilter(VOLUME_TEX, TEXTURE_FILTER_BILINEAR);
+    TEX_VOLUME = LoadTexture(ICON_VOLUME_LOC);
+    SetTextureFilter(TEX_VOLUME, TEXTURE_FILTER_BILINEAR);
 
-    Image setting_icon = LoadImage(ICON_SETTING_LOC);
-    SETTING_TEX = LoadTextureFromImage(setting_icon);
-    SetTextureFilter(SETTING_TEX, TEXTURE_FILTER_BILINEAR);
+    TEX_SETTING = LoadTexture(ICON_SETTING_LOC);
+    SetTextureFilter(TEX_SETTING, TEXTURE_FILTER_BILINEAR);
 
-    Image mode_icon = LoadImage(ICON_MODE_LOC);
-    MODE_TEX = LoadTextureFromImage(mode_icon);
-    SetTextureFilter(MODE_TEX, TEXTURE_FILTER_BILINEAR);
+    TEX_MODE = LoadTexture(ICON_MODE_LOC);
+    SetTextureFilter(TEX_MODE, TEXTURE_FILTER_BILINEAR);
 
-    Image x_icon = LoadImage(ICON_X_LOC);
-    X_TEX = LoadTextureFromImage(x_icon);
-    SetTextureFilter(X_TEX, TEXTURE_FILTER_BILINEAR);
+    TEX_EXIT = LoadTexture(ICON_X_LOC);
+    SetTextureFilter(TEX_EXIT, TEXTURE_FILTER_BILINEAR);
 
-    Image delete_icon = LoadImage(ICON_DELETE_LOC);
-    DELETE_TEX = LoadTextureFromImage(delete_icon);
-    SetTextureFilter(DELETE_TEX, TEXTURE_FILTER_BILINEAR);
+    TEX_DELETE = LoadTexture(ICON_DELETE_LOC);
+    SetTextureFilter(TEX_DELETE, TEXTURE_FILTER_BILINEAR);
 
-    Image pointer_icon = LoadImage(ICON_POINTER_LOC);
-    POINTER_TEX = LoadTextureFromImage(pointer_icon);
-    SetTextureFilter(POINTER_TEX, TEXTURE_FILTER_BILINEAR);
+    TEX_POINTER = LoadTexture(ICON_POINTER_LOC);
+    SetTextureFilter(TEX_POINTER, TEXTURE_FILTER_BILINEAR);
 
-    Image lock_icon = LoadImage(ICON_LOCK_LOC);
-    LOCK_TEX = LoadTextureFromImage(lock_icon);
-    SetTextureFilter(LOCK_TEX, TEXTURE_FILTER_BILINEAR);
+    TEX_LOCK = LoadTexture(ICON_LOCK_LOC);
+    SetTextureFilter(TEX_LOCK, TEXTURE_FILTER_BILINEAR);
+
+    TEX_TOGGLE = LoadTexture(ICON_TOGGLE_LOC);
+    SetTextureFilter(TEX_TOGGLE, TEXTURE_FILTER_BILINEAR);
 
     p->circle = LoadShader(NULL, "resources/shaders/circle.fs");
     p->bubble = LoadShader(NULL, "resources/shaders/bubble.fs");
@@ -1206,72 +1202,44 @@ void DrawDragDropPopupTray()
                 popup_h
             };
 
+            std::string text_cpp{};
+            Color color_bg{};
+
             if (tray.getInfo() == SUCCESS)
             {
-                Color color_bg = DARKGREEN;
-                DrawRectangleRounded(popup_rect, 0.2F, 10, Fade(color_bg, alpha));
-
-                // Draw Text
-                font = &font_s_reg;
-                Color font_color = WHITE;
-                std::string text_cpp = "Success load \"" + tray.name + "\"";
-                // trim text_cpp sesuai dengan space
-                float font_size = popup_rect.height * 0.5F;
-                float font_space = 0.0F;
-                float width_text = popup_rect.width * 0.92F;
-                text_cpp = TrimDisplayString(text_cpp, width_text, font_size, font_space, EASY);
-                const char* text = text_cpp.c_str();
-                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-                Vector2 text_coor{
-                    popup_rect.x + (popup_rect.width - text_measure.x) / 2,
-                    popup_rect.y + (popup_rect.height - text_measure.y) / 2
-                };
-                DrawTextEx(*font, text, text_coor, font_size, font_space, Fade(font_color, alpha));
+                color_bg = DARKGREEN;
+                text_cpp = "Success load \"" + tray.name + "\"";
             }
             else if (tray.getInfo() == FAILED)
             {
-                Color color_bg = RED;
-                DrawRectangleRounded(popup_rect, 0.2F, 10, Fade(color_bg, alpha));
-
-                // Draw Text
-                font = &font_s_reg;
-                Color font_color = WHITE;
-                std::string text_cpp = "Couldn't load \"" + tray.name + "\"";
-                // trim text_cpp sesuai dengan space
-                float font_size = popup_rect.height * 0.5F;
-                float font_space = 0.0F;
-                float width_text = popup_rect.width * 0.92F;
-                text_cpp = TrimDisplayString(text_cpp, width_text, font_size, font_space, EASY);
-                const char* text = text_cpp.c_str();
-                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-                Vector2 text_coor{
-                    popup_rect.x + (popup_rect.width - text_measure.x) / 2,
-                    popup_rect.y + (popup_rect.height - text_measure.y) / 2
-                };
-                DrawTextEx(*font, text, text_coor, font_size, font_space, Fade(font_color, alpha));
+                color_bg = RED;
+                text_cpp = "Couldn't load \"" + tray.name + "\"";
             }
             else if (tray.getInfo() == DELETE)
             {
-                Color color_bg = DARKBROWN;
-                DrawRectangleRounded(popup_rect, 0.2F, 10, Fade(color_bg, alpha));
+                //color_bg = DARKBLUE;
+                color_bg = { 190, 76, 45, 255 };
+                text_cpp = "Deleting \"" + tray.name + "\"";
 
-                // Draw Text
-                font = &font_s_reg;
-                Color font_color = WHITE;
-                std::string text_cpp = "Deleting \"" + tray.name + "\"";
-                // trim text_cpp sesuai dengan space
-                float font_size = popup_rect.height * 0.5F;
-                float font_space = 0.0F;
-                float width_text = popup_rect.width * 0.92F;
-                text_cpp = TrimDisplayString(text_cpp, width_text, font_size, font_space, EASY);
-                const char* text = text_cpp.c_str();
-                Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
-                Vector2 text_coor{
-                    popup_rect.x + (popup_rect.width - text_measure.x) / 2,
-                    popup_rect.y + (popup_rect.height - text_measure.y) / 2
-                };
-                DrawTextEx(*font, text, text_coor, font_size, font_space, Fade(font_color, alpha));
             }
+
+            // Draw Rect
+            DrawRectangleRounded(popup_rect, 0.2F, 10, Fade(color_bg, alpha));
+            DrawRectangleRoundedLines(popup_rect, 0.2F, 10, 3.0F, Fade(color_bg, alpha * 0.4F));
+            // Draw Text
+            font = &font_s_reg;
+            Color font_color = WHITE;
+            float font_size = popup_rect.height * 0.5F;
+            float font_space = 0.0F;
+            float width_text = popup_rect.width * 0.9F;
+            text_cpp = TrimDisplayString(text_cpp, width_text, font_size, font_space, EASY);
+            const char* text = text_cpp.c_str();
+            Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
+            Vector2 text_coor{
+                popup_rect.x + (popup_rect.width - text_measure.x) / 2,
+                popup_rect.y + (popup_rect.height - text_measure.y) / 2
+            };
+            DrawTextEx(*font, text, text_coor, font_size, font_space, Fade(font_color, alpha));
 
         }
 
@@ -1317,7 +1285,7 @@ void DrawSplashScreen()
             };
             DrawRectangleRoundedLines(dest, 0.15F, 10, 1.0F, Fade(LIGHTGRAY, alpha));
             Rectangle source{ 0,0,200,200 };
-            DrawTexturePro(TIRAKAT_ICON_TEX, source, dest, { 0,0 }, 0, Fade(WHITE, alpha));
+            DrawTexturePro(TEX_TIRAKAT, source, dest, { 0,0 }, 0, Fade(WHITE, alpha));
 
             // Draw Made By
             Rectangle text_rect{
@@ -1853,16 +1821,17 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
 
 
         // SPECIAL CASE TOOLTIP
-        if (special_btn_setting.enable == ON && CheckCollisionPointRec(mouse_position, special_btn_setting.rect)) {
-            std::string info{ "Reset Counter" };
-            Tooltip(special_btn_setting.rect, font_visual_mode_child, screen, info);
-        } 
+        if (CheckCollisionPointRec(mouse_position, panel_music_list)) {
+            if (special_btn_setting.enable == ON && CheckCollisionPointRec(mouse_position, special_btn_setting.rect)) {
+                std::string info{ "Reset Counter" };
+                Tooltip(special_btn_setting.rect, font_visual_mode_child, screen, info);
+            }
 
-        if (special_btn_delete.enable == ON && CheckCollisionPointRec(mouse_position, special_btn_delete.rect)) {
-            std::string info{ "Delete Music" };
-            Tooltip(special_btn_delete.rect, font_visual_mode_child, screen, info);
+            if (special_btn_delete.enable == ON && CheckCollisionPointRec(mouse_position, special_btn_delete.rect)) {
+                std::string info{ "Delete Music" };
+                Tooltip(special_btn_delete.rect, font_visual_mode_child, screen, info);
+            }
         }
-        
     }
 
 
@@ -1961,7 +1930,7 @@ void DrawPopUpReset(Rectangle& panel_main)
         float icon_size = 100.0F;
         Rectangle dest = x_rect;
         Rectangle source{ 0, 0, icon_size, icon_size };
-        DrawTexturePro(X_TEX, source, dest, { 0,0 }, 0, icon_color);
+        DrawTexturePro(TEX_EXIT, source, dest, { 0,0 }, 0, icon_color);
     }
 
     // DRAW BODY
@@ -2344,7 +2313,7 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
     {
         Rectangle dest = button_volume;
         Rectangle source{ icon_index * icon_size, 0, icon_size, icon_size };
-        DrawTexturePro(VOLUME_TEX, source, dest, { 0,0 }, 0, icon_color);
+        DrawTexturePro(TEX_VOLUME, source, dest, { 0,0 }, 0, icon_color);
     }
 
     // VOLUME SLIDER
@@ -2496,6 +2465,7 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
         panel_list_boundary.width,
         content_h
     };
+    //DrawRectangleRec(panel_list_boundary, YELLOW);
 
     if (CheckCollisionPointRec(mouse_position, panel)) {
         content_velocity += GetMouseWheelMove() * data.size() * (content_h * 3 / 4);
@@ -2518,9 +2488,9 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
 
     BeginScissorMode(
         static_cast<int>(panel_list_boundary.x),
-        static_cast<int>(panel_list_boundary.y - 2),
+        static_cast<int>(panel_list_boundary.y - 0),
         static_cast<int>(panel_list_boundary.width),
-        static_cast<int>(panel_list_boundary.height + 4)
+        static_cast<int>(panel_list_boundary.height + 0)
     );
 
     Rectangle moving_boundary{
@@ -2827,13 +2797,15 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                         btn_width
                     };
 
+                    if (CheckCollisionPointRec(mouse_position, panel_list_boundary)) {
 
-                    if (CheckCollisionPointRec(mouse_position, setting_btn)) {
-                        DrawRectangleRounded(setting_btn, 0.2F, 10, Fade(WHITE, 0.75F));
-                    }
+                        if (CheckCollisionPointRec(mouse_position, setting_btn)) {
+                            DrawRectangleRounded(setting_btn, 0.2F, 10, Fade(WHITE, 0.75F));
+                        }
 
-                    if (CheckCollisionPointRec(mouse_position, delete_btn)) {
-                        DrawRectangleRounded(delete_btn, 0.2F, 10, Fade(WHITE, 0.75F));
+                        if (CheckCollisionPointRec(mouse_position, delete_btn)) {
+                            DrawRectangleRounded(delete_btn, 0.2F, 10, Fade(WHITE, 0.75F));
+                        }
                     }
 
 
@@ -2842,7 +2814,7 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                         float icon_size = 100.0F;
                         Rectangle dest = setting_btn;
                         Rectangle source = { 0, 0, icon_size, icon_size };
-                        DrawTexturePro(SETTING_TEX, source, dest, { 0,0 }, 0, BLACK);
+                        DrawTexturePro(TEX_SETTING, source, dest, { 0,0 }, 0, BLACK);
                     }
                 
                     // DRAW DELETE ICON
@@ -2850,24 +2822,26 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                         float icon_size = 100.0F;
                         Rectangle dest = delete_btn;
                         Rectangle source = { 0, 0, icon_size, icon_size };
-                        DrawTexturePro(DELETE_TEX, source, dest, { 0,0 }, 0, color_content);
+                        DrawTexturePro(TEX_DELETE, source, dest, { 0,0 }, 0, color_content);
                     }
 
+                    if (CheckCollisionPointRec(mouse_position, panel_list_boundary)) {
 
-                    if (CheckCollisionPointRec(mouse_position, setting_btn)) {
-                        time_down = 0.5;
-                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                            p->popup_on = ON;
+                        if (CheckCollisionPointRec(mouse_position, setting_btn)) {
+                            time_down = 0.5;
+                            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                                p->popup_on = ON;
+                            }
                         }
-                    } 
 
-                    if (CheckCollisionPointRec(mouse_position, delete_btn)) {
-                        time_down = 0.5F;
-                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                        if (CheckCollisionPointRec(mouse_position, delete_btn)) {
+                            time_down = 0.5F;
+                            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
 
-                            DeleteMusic(retFlag, p->option_music_order);
-                            p->option_status = OFF;
+                                DeleteMusic(retFlag, p->option_music_order);
+                                p->option_status = OFF;
 
+                            }
                         }
                     }
 
@@ -3080,7 +3054,7 @@ void DrawMainDisplay(Rectangle& panel_main)
         p->glow = !p->glow;
     }
 
-    if (p->music_playing) {
+    if (p->music_playing && p->visual_mode_active != SPECTROGRAM) {     // I dont know why when use windowing make the Image spectrogram result not consistent.
         //dc_offset(fftw_in.data());
         //hann_window(fftw_in.data(), N);
         hamming_window(fftw_in.data(), N);
@@ -3316,12 +3290,24 @@ void DrawMainDisplay(Rectangle& panel_main)
 
                 // NEW FFT ROTATION STYLE, USE LINE AND SHADERS
                 color = ColorFromHSV(hue * 360 + GetFrameTime(), sat, val);
+
+                float coef_y{};
+                float coef_val{};
+
+                if (p->drawMiniWave) {
+                    coef_y = 0.58F;
+                    coef_val = 0.42F;
+                }
+                else {
+                    coef_y = 0.55F;
+                    coef_val = 0.475F;
+                }
+
                 Vector2 center_panel_main{
                     panel_display.x + (panel_display.width * 0.5F),
-                    panel_display.y + (panel_display.height * 0.58F)
+                    panel_display.y + (panel_display.height * coef_y)
                 };
-
-                float value = sqrt(final_amplitude) * panel_display.height * 0.42F;
+                float value = sqrt(final_amplitude) * panel_display.height * coef_val;
                 float angle = (360.0F / 50.0F) * i;
                 //float angle = 0.5F * (float)i;
                 Vector2 startPos_fft_rotation = center_panel_main;
@@ -3641,77 +3627,84 @@ void DrawMainDisplay(Rectangle& panel_main)
 
         DrawSplineLinear(audio_wave_live.data(), (int)wave_live.size(), 3.F, RAYWHITE);
 
-        static float alpha_coef{1.0f};
-        bool draw_icon = alpha_coef > 0.0F;
-        static float time_down{};
-
-        float toggle_btn_size = 50.0F;
-        Rectangle toggle_btn
         {
-            wave_live_signal_base.x + (wave_live_signal_base.width - toggle_btn_size) / 2,
-            wave_live_signal_base.y,
-            toggle_btn_size,
-            toggle_btn_size
-        };
 
-        float pad_button = 35.0F;
-        Rectangle hover_area
-        {
-            toggle_btn.x - (pad_button * 1),
-            toggle_btn.y - (pad_button * 1),
-            toggle_btn.width + (pad_button * 2),
-            toggle_btn.height + (pad_button * 2),
-        };
+            static float alpha_coef{ 0.0f };
+            bool draw_icon = alpha_coef > 0.0F;
 
-        if (CheckCollisionPointRec(mouse_position, hover_area)) {
-            if (alpha_coef <= 1.0F) {
-                alpha_coef += sqrtf(dt);
+            float toggle_btn_size = 50.0F;
+            Rectangle toggle_panel
+            {
+                wave_live_signal_base.x + (wave_live_signal_base.width - toggle_btn_size) / 2,
+                wave_live_signal_base.y,
+                toggle_btn_size,
+                toggle_btn_size
+            };
+
+            float pad{ 5.0F };
+            Rectangle toggle_btn{
+                toggle_panel.x + (pad * 1),
+                toggle_panel.y + (pad * 1),
+                toggle_panel.width - (pad * 2),
+                toggle_panel.height - (pad * 2),
+            };
+
+            float pad_button = 35.0F;
+            Rectangle hover_area
+            {
+                toggle_btn.x - (pad_button * 1),
+                toggle_btn.y - (pad_button * 1),
+                toggle_btn.width + (pad_button * 2),
+                toggle_btn.height + (pad_button * 2),
+            };
+
+            if (CheckCollisionPointRec(mouse_position, hover_area)) {
+                if (alpha_coef <= 1.0F) {
+                    alpha_coef += sqrtf(dt);
                 }
             }
-        else {
-            if (alpha_coef >= 0.0F) {
-                alpha_coef -= sqrtf(dt) / 4;
-            }
-        }
-
-        DrawRectangleRounded(toggle_btn, 0.25F, 10, Fade(LIGHTGRAY, 0.10F * alpha_coef));
-
-        if (CheckCollisionPointRec(mouse_position, toggle_btn)) {
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                p->toggle_windowed_wave = !p->toggle_windowed_wave;
+            else {
+                if (alpha_coef >= 0.0F) {
+                    alpha_coef -= sqrtf(dt) / 4;
+                }
             }
 
-            std::string info{};
-            if (p->toggle_windowed_wave) info = "Windowed Wave [W]";
-            else info = "Natural Wave [W]";
-            Tooltip(toggle_btn, font_visual_mode_child, screen, info);
+            DrawRectangleRounded(toggle_btn, 0.25F, 10, Fade(LIGHTGRAY, 0.10F * alpha_coef));
+
+            if (CheckCollisionPointRec(mouse_position, toggle_btn)) {
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    p->toggle_windowed_wave = !p->toggle_windowed_wave;
+                }
+
+                std::string info{};
+                if (p->toggle_windowed_wave) info = "Windowed Wave [W]";
+                else info = "Natural Wave [W]";
+                Tooltip(toggle_btn, font_visual_mode_child, screen, info);
+            }
+
+            Color color{};
+            if (p->toggle_windowed_wave) color = GREEN;
+            else color = MAROON;
+
+            {
+                Rectangle source{ 0,0,100,100 };
+                Rectangle dest{ toggle_btn };
+                DrawTexturePro(TEX_TOGGLE, source, dest, {}, 0, Fade(color, alpha_coef));
+            }
         }
-
-        Color color{};
-        if (p->toggle_windowed_wave) color = GREEN;
-        else color = MAROON;
-
-        Vector2 center{ toggle_btn.x + toggle_btn.width / 2, toggle_btn.y + toggle_btn.height / 2 };
-        DrawCircleLinesV(center, toggle_btn_size * 0.250F, Fade(color, alpha_coef));
-        DrawCircleLinesV(center, toggle_btn_size * 0.230F, Fade(color, alpha_coef));
-        DrawCircleLinesV(center, toggle_btn_size * 0.220F, Fade(color, alpha_coef));
-        DrawCircleLinesV(center, toggle_btn_size * 0.210F, Fade(color, alpha_coef));
 
         if (IsKeyPressed(KEY_W)) p->toggle_windowed_wave = !p->toggle_windowed_wave;
     }
 
+    // DRAW MINI AUDIO WAVE
     if (p->visual_mode_active != WAVE)
     {
-        if (p->music_playing) {
-            hann_window(wave_live.data(), wave_live.size());
-        }
-
         // AUDIO WAVE LIVE
         float width = panel_display.height * 0.3F;
-        float height = width * 0.6F;
+        float height = width * 0.5F;
         Rectangle wave_live_signal_base{
             panel_display.x + (panel_display.width - width) / 2,
-            panel_display.y + 50,
+            panel_display.y + 60,
             width,
             height
         };
@@ -3726,26 +3719,93 @@ void DrawMainDisplay(Rectangle& panel_main)
         };
         //DrawRectangleRec(wave_live_signal_rect, RAYWHITE);
 
-        float center_hor = wave_live_signal_rect.y + (wave_live_signal_rect.height / 2);
-        float point_width = wave_live_signal_rect.width / wave_live.size();
-        for (size_t i = 0; i < audio_wave_live.size(); i++) {
-            audio_wave_live.at(i) = {
-                wave_live_signal_rect.x + (point_width * i),
-                center_hor + (wave_live_signal_rect.height * wave_live.at(i)) * 0.4F,
-                //center_hor + (wave_live_signal_rect.height * static_cast<float>(fftw_in[i][0])) * 0.5F,
-            };
-        }
+        static float alpha_coef{ 0.0f };
+        bool draw_icon = alpha_coef > 0.0F;
 
-        DrawSplineLinear(audio_wave_live.data(), (int)wave_live.size(), 2.F, RAYWHITE);
+        float btn_size{ 50 };
+        Rectangle toggle_panel{
+            wave_live_signal_rect.x + (wave_live_signal_rect.width - btn_size) / 2,
+            wave_live_signal_rect.y + (wave_live_signal_rect.height),
+            btn_size,
+            btn_size
+        };
 
-        if (IsKeyPressed(KEY_P)) {
-            for (auto& i : wave_live) {
-                std::cout << i << " ";
+        pad = 5.0F;
+        Rectangle toggle_btn{
+            toggle_panel.x + (pad * 1),
+            toggle_panel.y + (pad * 1),
+            toggle_panel.width - (pad * 2),
+            toggle_panel.height - (pad * 2),
+        };
+
+        float pad_button = 35.0F;
+        Rectangle hover_area
+        {
+            toggle_btn.x - (pad_button * 1),
+            toggle_btn.y - (pad_button * 1),
+            toggle_btn.width + (pad_button * 2),
+            toggle_btn.height + (pad_button * 2),
+        };
+
+        if (CheckCollisionPointRec(mouse_position, hover_area)) {
+            if (alpha_coef <= 1.0F) {
+                alpha_coef += sqrtf(dt);
             }
-            std::cout << std::endl;
-            std::cout << wave_live.size() << std::endl;
+        }
+        else {
+            if (alpha_coef >= 0.0F) {
+                alpha_coef -= sqrtf(dt) / 4;
+            }
         }
 
+        DrawRectangleRounded(toggle_btn, 0.25F, 10, Fade(LIGHTGRAY, 0.10F * alpha_coef));
+
+
+        if (CheckCollisionPointRec(mouse_position, toggle_btn)) {
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                p->drawMiniWave = !p->drawMiniWave;
+            }
+
+            std::string info{};
+            if (p->drawMiniWave) info = "Off Draw [O]";
+            else info = "On Draw [O]";
+            Tooltip(toggle_btn, font_visual_mode_child, screen, info);
+        }
+
+        Color color{};
+        if (p->drawMiniWave) color = GREEN;
+        else color = MAROON;
+
+        {
+            Rectangle source{ 0,0,100,100 };
+            Rectangle dest{ toggle_btn };
+            DrawTexturePro(TEX_TOGGLE, source, dest, {}, 0, Fade(color, alpha_coef));
+        }
+        if (IsKeyPressed(KEY_O)) p->drawMiniWave = !p->drawMiniWave;
+
+        if (p->drawMiniWave)
+        {
+            if (p->music_playing) hann_window(wave_live.data(), wave_live.size());
+
+            float center_hor = wave_live_signal_rect.y + (wave_live_signal_rect.height / 2);
+            float point_width = wave_live_signal_rect.width / wave_live.size();
+            for (size_t i = 0; i < audio_wave_live.size(); i++) {
+                audio_wave_live.at(i) = {
+                    wave_live_signal_rect.x + (point_width * i),
+                    center_hor + (wave_live_signal_rect.height * wave_live.at(i)) * 0.4F,
+                };
+            }
+
+            DrawSplineLinear(audio_wave_live.data(), (int)wave_live.size(), 2.F, RAYWHITE);
+
+            if (IsKeyPressed(KEY_P)) {
+                for (auto& i : wave_live) {
+                    std::cout << i << " ";
+                }
+                std::cout << std::endl;
+                std::cout << wave_live.size() << std::endl;
+            }
+        }
     }
 
 
@@ -3777,9 +3837,7 @@ void DrawLockButton(Rectangle& panel_main, float dt)
         panel_lock_area_hover_w
     };
     //DrawRectangleRec(panel_lock_area_hover, RED);
-    //if (p->mouse_onscreen == ON && (CheckCollisionPointRec(mouse_position, panel_lock_area_hover))) {
-    //    Rectangle 
-    //}
+
     static float alpha_coef{};
     if (CheckCollisionPointRec(mouse_position, panel_lock_area_hover)) {
         if (alpha_coef <= 1.0F) {
@@ -3853,7 +3911,7 @@ void DrawLockButton(Rectangle& panel_main, float dt)
         float icon_size = 100.0F;
         Rectangle dest{ lock_btn };
         Rectangle source{ p->icon_lock_index * icon_size, 0, icon_size, icon_size };
-        DrawTexturePro(LOCK_TEX, source, dest, { 0,0 }, 0, Fade(icon_color, 1.0F * alpha_coef));
+        DrawTexturePro(TEX_LOCK, source, dest, { 0,0 }, 0, Fade(icon_color, 1.0F * alpha_coef));
     }
 
     if (IsKeyPressed(KEY_L) && time_down <= 0.0F) {
@@ -3945,7 +4003,7 @@ void DrawVisualModeButton(Rectangle& panel_main, float dt)
         float icon_size = 100.0F;
         Rectangle dest{ icon_rect };
         Rectangle source{ visual_mode_icon_index * icon_size, 0, icon_size, icon_size };
-        DrawTexturePro(POINTER_TEX, source, dest, { 0,0 }, 0, Fade(icon_color, 1.0F * alpha_coef));
+        DrawTexturePro(TEX_POINTER, source, dest, { 0,0 }, 0, Fade(icon_color, 1.0F * alpha_coef));
 
         // Toggle visual_mode_expand state
         if (CheckCollisionPointRec(mouse_position, visual_mode_panel)) {
@@ -4163,7 +4221,7 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
         float icon_size = 100.0F;
         Rectangle dest{ fullscreen_btn };
         Rectangle source{ p->icon_fullscreen_index * icon_size, 0, icon_size, icon_size };
-        DrawTexturePro(FULLSCREEN_TEX, source, dest, { 0,0 }, 0, Fade(icon_color, 1.0F * alpha_coef));
+        DrawTexturePro(TEX_FULLSCREEN, source, dest, { 0,0 }, 0, Fade(icon_color, 1.0F * alpha_coef));
     }
 
     if (IsKeyPressed(KEY_FULLSCREEN) && time_down <= 0.0F) {
@@ -4251,7 +4309,7 @@ void DrawMusicPlayModeButton(Rectangle& panel_main, float dt)
         float icon_size = 100.0F;
         Rectangle dest = play_mode_btn;
         Rectangle source = { p->repeat * icon_size, 0, icon_size, icon_size };
-        DrawTexturePro(MODE_TEX, source, dest, { 0,0 }, 0, Fade(icon_color, 1.0F * alpha_coef));
+        DrawTexturePro(TEX_MODE, source, dest, { 0,0 }, 0, Fade(icon_color, 1.0F * alpha_coef));
         
     }
 }
@@ -4453,7 +4511,7 @@ void DrawPlayPause(const Rectangle& play_rect, const Rectangle& hover_panel)
     {
         Rectangle dest = play_rect;
         Rectangle source{ p->icon_pp_index * icon_size, 0, icon_size, icon_size };
-        DrawTexturePro(PLAYPAUSE_TEX, source, dest, { 0,0 }, 0, icon_color);
+        DrawTexturePro(TEX_PLAYPAUSE, source, dest, { 0,0 }, 0, icon_color);
     }
 }
 
