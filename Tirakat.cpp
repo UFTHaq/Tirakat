@@ -325,6 +325,7 @@ struct Plug {
     //const int spectrogram_w{ 860 };   // for 99 FPS
     //const int spectrogram_w{ 640 };
     const int spectrogram_w{ 700 };     // for 75 FPS
+    //const int spectrogram_w{ 655 };     // for 75 FPS
     Image spectrogram_image{};
     Texture2D SPECTROGRAM_TEXTURE{};
     const int spectrogram_zone_out_w{ 255 };
@@ -583,7 +584,7 @@ void make_bins() {
     for (size_t i = 0; i <= BUCKETS; i++) {
         Freq_Bin.at(i) = min_frequency + i * bin_width;
         //Freq_Bin.at(i) = std::powf(10, log_f_min + i * delta_log);
-        std::cout << Freq_Bin[i] << std::endl;
+        //std::cout << Freq_Bin[i] << std::endl;
     }
 }
 
@@ -602,7 +603,7 @@ void Tooltip(const Rectangle& boundary, const Font& font, const ScreenSize& scre
     float rect_w{};
     float font_size = rect_h * 0.8F;
     float font_space = 0.5F;
-    float space = 10;
+    float space = 9;
     Vector2 text_measure = MeasureTextEx(font, information.c_str(), font_size, font_space);
     rect_w = text_measure.x + (space * 3.F);
     float center = boundary.x + boundary.width / 2;
@@ -617,7 +618,7 @@ void Tooltip(const Rectangle& boundary, const Font& font, const ScreenSize& scre
     tip_panel.x = center - (tip_panel.width / 2);
 
     if (tip_panel.x < space) tip_panel.x = space;
-    else if (tip_panel.x + tip_panel.width > screen.w) {
+    else if (tip_panel.x + tip_panel.width > screen.w - space) {
         tip_panel.x = screen.w - (tip_panel.width + space);
     }
     else if (tip_panel.y < space) tip_panel.y = boundary.y + boundary.height + space;
@@ -628,7 +629,9 @@ void Tooltip(const Rectangle& boundary, const Font& font, const ScreenSize& scre
     };
 
     Color color = { 20, 20, 20, 240 };
+    //Color color = { 50, 50, 50, 240 };
     DrawRectangleRounded(tip_panel, 0.25F, 10, color);
+    DrawRectangleRoundedLines(tip_panel, 0.25F, 10, 3.0F, Fade(DARKGRAY, 0.2F));
     DrawTextEx(font, information.c_str(), text_coor, font_size, font_space, RAYWHITE);
 
 }
@@ -869,6 +872,8 @@ void DrawMusicPlayModeButton(Rectangle& panel_main, float dt);
 
 void DrawMusicProgress(Rectangle& panel_progress, float& music_volume);
 
+void DrawLinePreviewJumpMusic(Rectangle& panel_progress, float progress_ratio);
+
 bool is_Draw_Icons();
 
 void DrawDragDropPage(ScreenSize screen);
@@ -906,7 +911,11 @@ static std::vector<float> ExtractMusicData(std::string& filename) {
 
     // Downsampling
     std::vector<float> processed_signal{};
-    int downsampling_rate = int(total_frames / 10000);
+    int downsampling_rate{};
+    if (total_frames > 1000000) downsampling_rate = int(total_frames / 10000);
+    else downsampling_rate = int(total_frames / 22500);
+
+    //int downsampling_rate = int(total_frames / 10000);
     std::cout << "downsampling rate : " << downsampling_rate << std::endl;
     for (size_t i = 0; i < audio_data.size(); i += downsampling_rate) {
         float sample = audio_data.at(i);
@@ -1100,16 +1109,17 @@ int main()
         ReloadVector();
 
         music = LoadMusicStream(data.at(music_play).path.c_str());
-        p->music_channel = music.stream.channels;
-        time_domain_signal = ExtractMusicData(data.at(music_play).path);
 
-        while (!IsMusicReady(music)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        if (IsMusicReady(music)) {
+            if (!IsMusicStreamPlaying(music)) {
+                PlayMusicStream(music);
+                AttachAudioStreamProcessor(music.stream, callback);
+                p->last_volume = GetMasterVolume();
+                p->music_playing = true;
+                p->music_channel = music.stream.channels;
+            }
         }
-        PlayMusicStream(music);
-        p->last_volume = GetMasterVolume();
-        p->music_playing = true;
-        AttachAudioStreamProcessor(music.stream, callback);
+        time_domain_signal = ExtractMusicData(data.at(music_play).path);
 
     }
 
@@ -1251,7 +1261,7 @@ void DrawDragDropPopupTray()
 void DrawSplashScreen()
 {
     // Draw Splash Screen
-    double splash_screen_time = 7.0;
+    double splash_screen_time = 5.0;
     static bool draw_splash_screen = true;
     if (draw_splash_screen) {
         float splash_screen_w = 250;
@@ -1593,9 +1603,15 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
                     DetachAudioStreamProcessor(music.stream, callback);
                     ResetVisualizerParameter();
                     music = LoadMusicStream(data.at(music_play).path.c_str());
-                    p->music_channel = music.stream.channels;
-                    AttachAudioStreamProcessor(music.stream, callback);
-
+                    if (IsMusicReady(music)) {
+                        if (!IsMusicStreamPlaying(music)) {
+                            PlayMusicStream(music);
+                            AttachAudioStreamProcessor(music.stream, callback);
+                            p->music_playing = true;
+                            p->music_channel = music.stream.channels;
+                        }
+                    }
+                    
                     time_domain_signal = ExtractMusicData(data.at(music_play).path);
                 }
 
@@ -1821,7 +1837,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
 
 
         // SPECIAL CASE TOOLTIP
-        if (CheckCollisionPointRec(mouse_position, panel_music_list)) {
+        if (CheckCollisionPointRec(mouse_position, panel_music_list) && IsCursorOnScreen()) {
             if (special_btn_setting.enable == ON && CheckCollisionPointRec(mouse_position, special_btn_setting.rect)) {
                 std::string info{ "Reset Counter" };
                 Tooltip(special_btn_setting.rect, font_visual_mode_child, screen, info);
@@ -2556,10 +2572,15 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
 
                             music_play = i;
                             music = LoadMusicStream(data.at(music_play).path.c_str());
-                            p->music_channel = music.stream.channels;
+                            if (IsMusicReady(music)) {
+                                if (!IsMusicStreamPlaying(music)) {
+                                    PlayMusicStream(music);
+                                    AttachAudioStreamProcessor(music.stream, callback);
+                                    p->music_playing = true;
+                                    p->music_channel = music.stream.channels;
+                                }
+                            }
                             time_domain_signal = ExtractMusicData(data.at(music_play).path);
-
-                            AttachAudioStreamProcessor(music.stream, callback);
 
                             p->reset_time = true;
                         }
@@ -2797,14 +2818,27 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                         btn_width
                     };
 
-                    if (CheckCollisionPointRec(mouse_position, panel_list_boundary)) {
+                    if (CheckCollisionPointRec(mouse_position, panel_list_boundary) && IsCursorOnScreen()) {
 
                         if (CheckCollisionPointRec(mouse_position, setting_btn)) {
                             DrawRectangleRounded(setting_btn, 0.2F, 10, Fade(WHITE, 0.75F));
+
+                            time_down = 1.0;
+                            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                                p->popup_on = ON;
+                            }
                         }
 
                         if (CheckCollisionPointRec(mouse_position, delete_btn)) {
                             DrawRectangleRounded(delete_btn, 0.2F, 10, Fade(WHITE, 0.75F));
+
+                            time_down = 1.0F;
+                            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+
+                                DeleteMusic(retFlag, p->option_music_order);
+                                p->option_status = OFF;
+
+                            }
                         }
                     }
 
@@ -2825,28 +2859,10 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                         DrawTexturePro(TEX_DELETE, source, dest, { 0,0 }, 0, color_content);
                     }
 
-                    if (CheckCollisionPointRec(mouse_position, panel_list_boundary)) {
-
-                        if (CheckCollisionPointRec(mouse_position, setting_btn)) {
-                            time_down = 0.5;
-                            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                                p->popup_on = ON;
-                            }
-                        }
-
-                        if (CheckCollisionPointRec(mouse_position, delete_btn)) {
-                            time_down = 0.5F;
-                            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-
-                                DeleteMusic(retFlag, p->option_music_order);
-                                p->option_status = OFF;
-
-                            }
-                        }
+                    {
+                        special_btn_setting = { ON, setting_btn };
+                        special_btn_delete = { ON, delete_btn };
                     }
-
-                    special_btn_setting = { ON, setting_btn };
-                    special_btn_delete = { ON, delete_btn };
                 }
 
             }
@@ -2935,7 +2951,7 @@ std::string TrimDisplayString(std::string& cpp_text, float text_width_limit, flo
     else if (TrimString == BOLD) {
         return result = cpp_text.substr(0, max_chars);
     }
-
+    else return "";
 }
 
 void DeleteMusic(int& retFlag, size_t order)
@@ -2978,13 +2994,17 @@ void DeleteMusic(int& retFlag, size_t order)
             ResetVisualizerParameter();
 
             music = LoadMusicStream(data.at(music_play).path.c_str());
-            p->music_channel = music.stream.channels;
+            if (IsMusicReady(music)) {
+                if (!IsMusicStreamPlaying(music)) {
+                    PlayMusicStream(music);
+                    AttachAudioStreamProcessor(music.stream, callback);
+                    p->music_playing = true;
+                    p->music_channel = music.stream.channels;
+                }
+            }
             time_domain_signal = ExtractMusicData(data.at(music_play).path);
 
             p->reset_time = true;
-            //setting_on = OFF;
-
-            AttachAudioStreamProcessor(music.stream, callback);
         }
     }
 
@@ -3963,7 +3983,7 @@ void DrawVisualModeButton(Rectangle& panel_main, float dt)
         };
     
         if ((p->visual_mode_expand == ON) || (CheckCollisionPointRec(mouse_position, visual_mode_panel))) {
-            DrawRectangleRounded(visual_mode_panel, 0.2F, 10, Fade(button_color, 0.4F * alpha_coef));
+            DrawRectangleRounded(visual_mode_panel, 0.2F, 10, Fade(button_color, 0.5F * alpha_coef));
         }
     
         const char* text = "Visual Mode";
@@ -4022,7 +4042,7 @@ void DrawVisualModeButton(Rectangle& panel_main, float dt)
                 visual_mode_expand_base_w,
                 visual_mode_expand_base_h * p->visualmode.size()
             };
-            DrawRectangleRounded(visual_mode_expand_base, 0.1F, 10, Fade(button_color, 0.15F));
+            DrawRectangleRounded(visual_mode_expand_base, 0.1F, 10, Fade(button_color, 0.25F));
 
             // DRAWING ALL VISUAL MODE CHILD
             for (size_t i = 0; i < p->visualmode.size(); i++) {
@@ -4160,7 +4180,7 @@ void DrawFullscreenButton(Rectangle& panel_main, float dt)
     bool draw_icon = alpha_coef > 0.0F;
     static float time_down{};
 
-    if (draw_icon) {
+    if (draw_icon && IsCursorOnScreen()) {
         p->mouse_onscreen_timer = HUD_TIMER_SECS;
         float fullscreen_btn_size = 50.0F;
         float space = 5.0F;
@@ -4272,7 +4292,7 @@ void DrawMusicPlayModeButton(Rectangle& panel_main, float dt)
 
     bool draw_icon = alpha_coef > 0.0F;
 
-    if (draw_icon) {
+    if (draw_icon && IsCursorOnScreen()) {
         p->mouse_onscreen_timer = HUD_TIMER_SECS;
         float play_mode_btn_size = 50.0F;
         float space = 5.0F;
@@ -4352,6 +4372,13 @@ void DrawMusicProgress(Rectangle& panel_progress, float& music_volume)
             else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
                 p->dragging = DRAG_MUSIC_PROGRESS;
             }
+
+            if (IsCursorOnScreen())
+            {
+                // Hover Preview Jump Track
+                // Using thin rectangle instead of line as Line because it can be pivot for tooltip.
+                DrawLinePreviewJumpMusic(panel_progress, progress_ratio);
+            }
         }
     }
 
@@ -4370,6 +4397,11 @@ void DrawMusicProgress(Rectangle& panel_progress, float& music_volume)
             music_time_now = music_duration;
             progress_w = progress_ratio * music_time_now;
         }
+
+        {
+            // Drag Preview Jump Track
+            DrawLinePreviewJumpMusic(panel_progress, progress_ratio);
+        }
     }
     else if (p->dragging == DRAG_MUSIC_PROGRESS && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
         p->dragging = DRAG_RELEASE;
@@ -4385,6 +4417,39 @@ void DrawMusicProgress(Rectangle& panel_progress, float& music_volume)
         SeekMusicStream(music, (t * music_duration / 1000));
     }
 
+}
+
+void DrawLinePreviewJumpMusic(Rectangle& panel_progress, float progress_ratio)
+{
+    float thick = 0.5F;
+    float pad_coef = 6;
+    Rectangle previewLine{
+        mouse_position.x - (thick * 0.5F),
+        panel_progress.y + (thick * pad_coef),
+        thick,
+        panel_progress.height - (thick * pad_coef * 2)
+    };
+
+    float preview_x = mouse_position.x - panel_progress.x;
+    if (preview_x > panel_progress.width) {
+        preview_x = panel_progress.width;
+        previewLine.x = panel_progress.x + panel_progress.width;
+    }
+    if (preview_x < 0) {
+        preview_x = 0;
+        previewLine.x = panel_progress.x;
+    }
+    DrawRectangleRec(previewLine, Fade(RAYWHITE, 1.0F));
+
+    int preview_time = static_cast<int>(preview_x / progress_ratio);
+    int minutes_pro = preview_time / (60 * 1000);
+    int seconds_pro = (preview_time / 1000) % 60;
+
+    formatted_progress.str("");
+    formatted_progress << std::setw(2) << std::setfill('0') << minutes_pro << ":" << std::setw(2) << std::setfill('0') << seconds_pro;
+
+    std::string info = formatted_progress.str();
+    Tooltip(previewLine, font_visual_mode_child, screen, info);
 }
 
 bool is_Draw_Icons()
@@ -4432,12 +4497,16 @@ void LoadMP3()
                 if (zero_data) {
                     music_play = 0;
                     music = LoadMusicStream(data.at(music_play).path.c_str());
-                    p->music_channel = music.stream.channels;
-                    while (!IsMusicReady(music)) {
+
+                    if (IsMusicReady(music)) {
+                        if (!IsMusicStreamPlaying(music)) {
+                            PlayMusicStream(music);
+                            AttachAudioStreamProcessor(music.stream, callback);
+                            p->music_playing = true;
+                            p->music_channel = music.stream.channels;
+                        }
                     }
-                    PlayMusicStream(music);
-                    AttachAudioStreamProcessor(music.stream, callback);
-                    p->music_playing = true;
+
                 }
                 zero_data = false;
             }
