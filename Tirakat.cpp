@@ -139,6 +139,7 @@
 #define ICON_POINTER_LOC    {"resources/Icons/Pointer.png"}
 #define ICON_LOCK_LOC       {"resources/Icons/Lock.png"}
 #define ICON_TOGGLE_LOC     {"resources/Icons/Toggle.png"}
+#define ICON_DOWNLOAD_LOC   {"resources/Icons/Download.png"}
 
 #define HUD_TIMER_SECS                              1.5F
 #define PANEL_LEFT_WIDTH                            275.0F
@@ -149,18 +150,24 @@
 #define PANEL_MEIDA_WIDTH                           PANEL_LEFT_WIDTH
 #define PANEL_PROGRESS_HEIGHT                       PANEL_BOTTOM
 #define PANEL_PROGRESS_HEIGHT_FULLSCREEN_OFFSCREEN  5.0F
-#define PANEL_LINE_THICK                            4.0F // 4.0F
+#define PANEL_LINE_THICK                            2.0F // 4.0F
 
-#define BASE_COLOR                  Color{  20,  20,  20, 255 }
+//#define BASE_COLOR                  Color{  20,  20,  20, 255 }
+#define BASE_COLOR                  Color{  10,  10,  10, 255 }
 #define PANEL_COLOR                 Color{  30,  30,  30, 255 }
 #define PANEL_LEFT_COLOR            Color{  40,  40,  40, 255 }
 #define PANEL_COLOR2                Color{  30,  30,  30, 255 }
-#define PANEL_LINE_COLOR            Color{  20,  20,  20, 255 }
+//#define PANEL_LINE_COLOR            Color{  20,  20,  20, 255 }
+#define PANEL_LINE_COLOR            Color{  30,  30,  30, 180 }
 #define PANEL_PROGRESS_BASE_COLOR   Color{  25,  25,  25, 255 }
 #define PANEL_PROGRESS_COLOR        DARKGRAY
 
-#define CONTENT_COLOR               Color{  60,  60,  60, 255 }
-#define CONTENT_CHOOSE_COLOR        Color{ 150, 150, 150, 255 }
+#define CONTENT_COLOR               Color{  60,  60,  63, 255 }
+#define CONTENT_CHOOSE_COLOR        Color{ 150, 150, 153, 255 }
+#define CONTENT_OPTION_COLOR        Color{ 190,  76,  45, 255 }
+//#define CONTENT_CHOOSE_COLOR        Color{ 190,  76,  45, 255 }
+#define CONTENT_REARRANGE_COLOR     Color{  12,  82, 162, 255 }
+//#define CONTENT_REARRANGE_COLOR     Color{DARKBLUE}
 
 #define BLUE_BUTTON_COLOR           Color{  58,  76, 131, 255 }
 #define POPUP_CARD_COLOR            Color{ 112, 141, 225, 255 }
@@ -325,7 +332,7 @@ struct Plug {
     //const int spectrogram_w{ 860 };   // for 99 FPS
     //const int spectrogram_w{ 640 };
     const int spectrogram_w{ 700 };     // for 75 FPS
-    //const int spectrogram_w{ 655 };     // for 75 FPS
+    //const int spectrogram_w{ 630 };     // for 75 FPS
     Image spectrogram_image{};
     Texture2D SPECTROGRAM_TEXTURE{};
     const int spectrogram_zone_out_w{ 255 };
@@ -335,6 +342,9 @@ struct Plug {
     Texture2D SPECTROGRAM_ZONE_IN_TEXTURE{};
     std::deque<DragDropPopup> DragDropPopupTray{};
     bool drawMiniWave{ ON };
+    bool spectrogramDownloading{ OFF };
+    bool spectrogramDownloaded{ OFF };
+    std::string spectrogramOutputFolder{ "resources/Spectrogram/" };
 };
 
 Plug tirakat{};
@@ -346,6 +356,7 @@ struct Data {
     int target{};
     int counter{};
     int duration{};
+    bool downloaded{};
 };
 
 struct ScreenSize {
@@ -603,7 +614,7 @@ void Tooltip(const Rectangle& boundary, const Font& font, const ScreenSize& scre
     float rect_w{};
     float font_size = rect_h * 0.8F;
     float font_space = 0.5F;
-    float space = 9;
+    float space = 10;
     Vector2 text_measure = MeasureTextEx(font, information.c_str(), font_size, font_space);
     rect_w = text_measure.x + (space * 3.F);
     float center = boundary.x + boundary.width / 2;
@@ -769,9 +780,10 @@ Color SpectrogramColor(float normalizedValue) {
     }
     else {
         // Zero Value
-        red = 21;
-        green = 21;
-        blue = 22;
+        red = 15;
+        green = 15;
+        blue = 15;
+        alpha = 100;
     }
 
     // Return the color as raylib Color
@@ -896,6 +908,7 @@ static std::vector<float> ExtractMusicData(std::string& filename) {
     // Load the entire audio for processing (modify for large files)
     sf::SoundBuffer soundBuffer{};
     soundBuffer.loadFromFile(filename);
+    std::cout << soundBuffer.getSampleRate() << std::endl;
 
     sf::Uint64 total_samples = soundBuffer.getSampleCount();
     audio_data.reserve(total_samples);
@@ -975,6 +988,7 @@ Texture2D TEX_MODE{};
 Texture2D TEX_POINTER{};
 Texture2D TEX_LOCK{};
 Texture2D TEX_TOGGLE{};
+Texture2D TEX_DOWNLOAD{};
 
 std::ostringstream formatted_duration{};
 std::ostringstream formatted_progress{};
@@ -1097,6 +1111,9 @@ int main()
     TEX_TOGGLE = LoadTexture(ICON_TOGGLE_LOC);
     SetTextureFilter(TEX_TOGGLE, TEXTURE_FILTER_BILINEAR);
 
+    TEX_DOWNLOAD = LoadTexture(ICON_DOWNLOAD_LOC);
+    SetTextureFilter(TEX_DOWNLOAD, TEXTURE_FILTER_BILINEAR);
+
     p->circle = LoadShader(NULL, "resources/shaders/circle.fs");
     p->bubble = LoadShader(NULL, "resources/shaders/bubble.fs");
 
@@ -1172,7 +1189,7 @@ int main()
         }
 
         //DrawFPS(screen.w - 83, 10);
-        DrawFPS(screen.w / 2 - 38, 10);
+        //DrawFPS(screen.w / 2 - 38, 10);
 
         DrawDragDropPopupTray();
 
@@ -1240,7 +1257,7 @@ void DrawDragDropPopupTray()
             font = &font_s_reg;
             Color font_color = WHITE;
             float font_size = popup_rect.height * 0.5F;
-            float font_space = 0.0F;
+            float font_space = -0.5F;
             float width_text = popup_rect.width * 0.9F;
             text_cpp = TrimDisplayString(text_cpp, width_text, font_size, font_space, EASY);
             const char* text = text_cpp.c_str();
@@ -2504,9 +2521,9 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
 
     BeginScissorMode(
         static_cast<int>(panel_list_boundary.x),
-        static_cast<int>(panel_list_boundary.y - 0),
+        static_cast<int>(panel_list_boundary.y - 2),        // diberi space lebih untuk ruang garis saat drag rearrange music.
         static_cast<int>(panel_list_boundary.width),
-        static_cast<int>(panel_list_boundary.height + 0)
+        static_cast<int>(panel_list_boundary.height + 4)
     );
 
     Rectangle moving_boundary{
@@ -2626,7 +2643,7 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                         if (hold == true) {
 
                             if (selected_index == i) {
-                                color_content = ORANGE;
+                                color_content = CONTENT_REARRANGE_COLOR;
                             }
 
                             delta_y_mouse_down = (y_while_selected - content_scroll) - mouse_position.y;
@@ -2659,7 +2676,8 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                             }
                             Vector2 start = { content.x + (content.width * 0.05F), line_y };
                             Vector2 end = { content.x + content.width - (content.width * 0.05F), line_y };
-                            DrawLineEx(start, end, 2.0, WHITE);
+                            DrawLineEx(start, end, 2.0F, WHITE);
+                            //DrawLineEx(start, end, 2.0, CONTENT_REARRANGE_COLOR);
 
                             if (scrollable) {
 
@@ -2737,7 +2755,7 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
         if (p->option_status == ON) {
             if (i == p->option_music_order) {
                 //color_content = ORANGE;
-                color_content = { 190, 76, 45, 255 };
+                color_content = CONTENT_OPTION_COLOR;
                 //color_content = { 105, 220, 57, 127 };
             }
         }
@@ -2883,7 +2901,8 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
     if (scrollable) {
         float t = visible_area_size / entire_scrollable_area;
         float q = content_scroll / entire_scrollable_area;
-        float padding = PANEL_LINE_THICK;
+        //float padding = PANEL_LINE_THICK;
+        float padding = 3.0;
         Rectangle scroll_bar_area{
             panel_list_boundary.x + panel_list_boundary.width + (padding * 0.5F),
             panel_list_boundary.y + (padding * 1),
@@ -3185,6 +3204,7 @@ void DrawMainDisplay(Rectangle& panel_main)
             Rectangle base = {
                 panel_display.x + (i * bar_w),
                 (panel_display.y + panel_display.height) - base_h * 1.5F,
+                //(panel_display.y + panel_display.height) - 20,
                 bar_w,
                 base_h
             };
@@ -3319,7 +3339,7 @@ void DrawMainDisplay(Rectangle& panel_main)
                     coef_val = 0.42F;
                 }
                 else {
-                    coef_y = 0.55F;
+                    coef_y = 0.54F;
                     coef_val = 0.475F;
                 }
 
@@ -3515,12 +3535,13 @@ void DrawMainDisplay(Rectangle& panel_main)
             dest_w,
             dest_h
         };
+        DrawRectangleLinesEx(dest, 0.5F, BLUE);
         
         Rectangle source{
             0,
-                0,
-                static_cast<float>(p->spectrogram_w),
-                static_cast<float>(p->spectrogram_h)
+            0,
+            static_cast<float>(p->spectrogram_w),
+            static_cast<float>(p->spectrogram_h)
         };
 
         static int time_skip = 0;
@@ -3605,6 +3626,206 @@ void DrawMainDisplay(Rectangle& panel_main)
 
             Color tint = WHITE;
             DrawTexturePro(p->SPECTROGRAM_ZONE_IN_TEXTURE, source_zone_out, dest_zone_in, { 0,0 }, 0, Fade(tint, 0.5F));
+        }
+
+        // DOWNLOAD OR SAVE SPECTROGRAM BUTTON
+        {
+            static float alpha_coef{ 0.0f };
+            bool draw_icon = alpha_coef > 0.0F;
+
+            float download_btn_size = 50.0F;
+            Rectangle download_panel
+            {
+                dest.x + dest.width - download_btn_size,
+                dest.y,
+                download_btn_size,
+                download_btn_size
+            };
+
+            float pad{ 5.0F };
+            Rectangle download_btn{
+                download_panel.x + (pad * 1),
+                download_panel.y + (pad * 1),
+                download_panel.width - (pad * 2),
+                download_panel.height - (pad * 2),
+            };
+
+            float pad_button = 35.0F;
+            Rectangle hover_area{ spectrogram_base_panel };
+
+            if (CheckCollisionPointRec(mouse_position, hover_area) && IsCursorOnScreen()) {
+                if (alpha_coef <= 1.0F) {
+                    alpha_coef += sqrtf(dt);
+                }
+            }
+            else {
+                if (alpha_coef >= 0.0F) {
+                    alpha_coef -= sqrtf(dt) / 4;
+                }
+            }
+
+            DrawRectangleRounded(download_btn, 0.25F, 10, Fade(BLACK, 0.5F * alpha_coef));
+
+            static std::vector<float> audioDataSpectrogram{};
+            std::vector<float> fftwOutput{};
+            std::vector<Color> imageColor{};
+
+            Color color{ GRAY };
+            if (CheckCollisionPointRec(mouse_position, download_btn)) {
+                p->spectrogramDownloaded = { data.at(music_play).downloaded };
+                if (!p->spectrogramDownloaded) {
+                    color = WHITE;
+                    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                        // TODO: SAVE SPECTROGRAM
+                        // concept -> load the music using raylib or sfml audio. then try read FFT. Easy Peasy.
+
+                        //std::vector<float> audioDataSpectrogram{};
+
+                        // Load the entire audio for processing (modify for large files)
+
+                        auto start = std::chrono::high_resolution_clock::now();
+                        sf::SoundBuffer soundBuffer{};
+                        soundBuffer.loadFromFile(data.at(music_play).path);
+                        //std::cout << soundBuffer.getSampleRate() << std::endl;
+                        auto end = std::chrono::high_resolution_clock::now();
+                        std::cout << "load time : "
+                            << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " milliseconds" << std::endl;
+
+
+                        sf::Uint64 total_samples = soundBuffer.getSampleCount();
+                        audioDataSpectrogram.reserve(total_samples);
+
+                        const sf::Int16* samples = soundBuffer.getSamples();
+
+                        for (size_t i = 0; i < total_samples; i++) {
+                            // Convert and push back all samples (no downsampling, only normalization)
+                            float sample = static_cast<float>(samples[i]) / 32768.0F; // assuming 16-bit signed integer.
+                            audioDataSpectrogram.push_back(sample);
+                        }
+                        int total_frames = (int)audioDataSpectrogram.size();
+
+                        //std::cout << "totalFrames : " << total_frames << std::endl;
+                        //std::cout << "sampleSizes : " << total_samples << std::endl;
+
+                        p->spectrogramDownloading = ON;
+
+                        //sdfsdfsdf
+                    }
+                }
+
+
+                std::string info{};
+                if (p->spectrogramDownloaded) info = "Save Spectrogram Disabled";
+                else info = "Save Spectrogram Enabled";
+                Tooltip(download_btn, font_visual_mode_child, screen, info);
+            }
+
+            // TRY TO DO IT IN WHOLE FIRST
+            if (p->spectrogramDownloading) {
+                size_t window = 480;
+
+                {
+                    size_t N = window;
+                    fftw_complex* in = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N * 2);
+                    fftw_complex* out = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N * 2);
+                    fftw_plan plan = fftw_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_MEASURE);
+
+                    // Use iterators for clarity and flexibility
+                    auto data_begin = audioDataSpectrogram.begin();
+                    auto data_end = audioDataSpectrogram.end();
+
+                    // Loop through the data in windowSize increments
+                    while (data_begin != data_end) {
+                        // Get the remaining data for the current window
+                        auto remaining = std::distance(data_begin, data_end);
+
+                        // Handle the last window (might be smaller than windowSize)
+                        auto window_end = (remaining >= window) ? data_begin + window : data_end;
+
+                        // Process the data in the current window (modify this section)
+                        for (auto it = data_begin; it != window_end; ++it) {
+                            // TODO: FFT
+                            int index = std::distance(data_begin, it);
+                            in[index][0] = *it;
+                        }
+                        fftw_execute(plan);
+
+                        for (size_t i = 0; i < N/2; i++) {
+                            fftwOutput.push_back(out[i][0]);
+                        }
+
+                        // Move to the next window (if applicable)
+                        data_begin = (data_begin != data_end) ? window_end : data_end;
+                    }
+
+                    fftw_destroy_plan(plan);
+
+                    float min_amp_spec = std::numeric_limits<float>::max();  // Or a very large positive value
+                    float max_amp_spec = std::numeric_limits<float>::min();  // Or a very large negative value
+
+                    int check{ 0 };
+                    std::cout << "Check : " << check << std::endl;
+                    check++;
+
+                    for (size_t i = 0; i < fftwOutput.size(); i++) {
+                        float real_num_spec = static_cast<float>(fftwOutput[i]);
+                        float imaginer_spec = static_cast<float>(fftwOutput[i]);
+                        float amplitude_spc = std::sqrt((real_num_spec * real_num_spec) + (imaginer_spec * imaginer_spec));
+                        min_amp_spec = std::min(min_amp_spec, amplitude_spc);
+                        max_amp_spec = std::max(max_amp_spec, amplitude_spc);
+                    }
+                    std::cout << "Check : " << check << std::endl;
+                    check++;
+
+                    for (size_t i = 0; i < fftwOutput.size(); i++) {
+                        float real_num_spec = static_cast<float>(fftwOutput[i]);
+                        float imaginer_spec = static_cast<float>(fftwOutput[i]);
+                        float amplitude_spc = std::sqrt((real_num_spec * real_num_spec) + (imaginer_spec * imaginer_spec));
+
+                        amplitude_spc = normalization(amplitude_spc, min_amp_spec, max_amp_spec);
+                        if (amplitude_spc < 0.1F) amplitude_spc = 0.0F;
+                        imageColor.push_back(SpectrogramColor(amplitude_spc));
+                    }
+                    std::cout << "Check : " << check << std::endl;
+                    check++;
+
+                    //NOT WORKING
+
+                    int imageWidth = ((int)fftwOutput.size() / (window));
+                    Image download{};
+                    download = {
+                        imageColor.data(),
+                        imageWidth,
+                        (int)window,
+                        1,
+                        PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
+                    };
+                    std::string fileExport{ p->spectrogramOutputFolder + data.at(music_play).name + ".png" };
+                    std::cout << "Export : " << fileExport << std::endl;
+                    ExportImage(download, fileExport.c_str());
+
+                    std::cout << "Check : " << check << std::endl;
+                    check++;
+                }
+
+                p->spectrogramDownloading = OFF;
+
+                std::cout << audioDataSpectrogram.size() << std::endl;
+                audioDataSpectrogram.clear();
+                audioDataSpectrogram.shrink_to_fit();
+                std::cout << audioDataSpectrogram.size() << std::endl;
+            }
+
+            // TRY TO DO IT IN MANUAL CONCURRENCY :)
+            //static size_t 
+
+
+
+            {
+                Rectangle source{ 0,0,100,100 };
+                Rectangle dest{ download_btn };
+                DrawTexturePro(TEX_DOWNLOAD, source, dest, {}, 0, Fade(color, alpha_coef));
+            }
         }
 
 
@@ -4550,7 +4771,9 @@ bool Save()
                 << entry.name << ","
                 << entry.target << ","
                 << entry.counter << ","
-                << entry.duration << std::endl;
+                //<< entry.duration << std::endl;
+                << entry.duration << ","
+                << entry.downloaded << std::endl;
         }
         file.close();
 
@@ -4682,6 +4905,24 @@ void ReloadVector()
     std::ifstream file(data_txt);
     data.clear();
 
+    // Read Output Image Spectrogram folder files
+    const std::filesystem::path spectrogramFolder{ p->spectrogramOutputFolder };
+    if (std::filesystem::exists(spectrogramFolder) == false) {
+        std::string info = { "[" + spectrogramFolder.string() + "] Directory is missing."};
+        TraceLog(LOG_ERROR, info.c_str());
+        std::filesystem::create_directory(spectrogramFolder);
+        info = { "CREATE: [" + spectrogramFolder.string() + "] Directory." };
+        TraceLog(LOG_INFO, info.c_str());
+    }
+
+    std::vector<std::string> spectrogramFiles{};
+    for (auto const& file : std::filesystem::directory_iterator{ spectrogramFolder }) {
+        if (IsFileExtension(file.path().string().c_str(), ".png")) {
+            std::cout << "File : " << file.path().filename().stem().string() << std::endl;
+            spectrogramFiles.push_back(file.path().filename().stem().string());
+        }
+    }
+
     if (file.is_open()) {
         std::string line{};
         while (std::getline(file, line)) {
@@ -4699,6 +4940,16 @@ void ReloadVector()
             entry.target = std::stoi(tokens.at(2));
             entry.counter = std::stoi(tokens.at(3));
             entry.duration = std::stoi(tokens.at(4));
+            //entry.downloaded = std::stoi(tokens.at(5));
+
+            if (std::find(spectrogramFiles.begin(), spectrogramFiles.end(), entry.name) != spectrogramFiles.end()) {
+                entry.downloaded = true;
+                std::cout << entry.name << " Downloaded : " << entry.downloaded << std::endl;
+            }
+            else {
+                entry.downloaded = false;
+                std::cout << entry.name << " Downloaded : " << entry.downloaded << std::endl;
+            }
 
             data.push_back(entry);
         }
@@ -4709,6 +4960,7 @@ void ReloadVector()
     //for (const auto& i : data) {
     //    std::cout << i.name << std::endl;
     //    std::cout << i.duration << std::endl;
+    //    std::cout << i.downloaded << std::endl;
     //}
 }
 
