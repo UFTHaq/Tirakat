@@ -906,19 +906,79 @@ static std::vector<float> ExtractMusicData(std::string& filename) {
     std::vector<float> audio_data{};
 
     // Load the entire audio for processing (modify for large files)
-    sf::SoundBuffer soundBuffer{};
-    soundBuffer.loadFromFile(filename);
-    std::cout << soundBuffer.getSampleRate() << std::endl;
 
-    sf::Uint64 total_samples = soundBuffer.getSampleCount();
-    audio_data.reserve(total_samples);
+    if (1)
+    {
+        // SFML
+        auto start = std::chrono::high_resolution_clock::now();
+        sf::SoundBuffer soundBuffer{};
+        soundBuffer.loadFromFile(filename);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::cout << "Load time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << std::endl;
+        std::cout << soundBuffer.getSampleRate() << std::endl;
 
-    const sf::Int16* samples = soundBuffer.getSamples();
+        sf::Uint64 total_samples = soundBuffer.getSampleCount();
+        audio_data.reserve(total_samples);
 
-    for (size_t i = 0; i < total_samples; i++) {
-        // Convert and push back all samples (no downsampling, only normalization)
-        float sample = static_cast<float>(samples[i]) / 32768.0F; // assuming 16-bit signed integer.
-        audio_data.push_back(sample);
+        const sf::Int16* samples = soundBuffer.getSamples();
+
+        for (size_t i = 0; i < total_samples; i++) {
+            // Convert and push back all samples (no downsampling, only normalization)
+            float sample = static_cast<float>(samples[i]) / 32768.0F; // assuming 16-bit signed integer.
+            audio_data.push_back(sample);
+        }
+        int total_frames = (int)audio_data.size();
+    }
+    else 
+    {
+        if (1)
+        {
+            // RAYLIB WAVE LOAD
+            auto start = std::chrono::high_resolution_clock::now();
+            Wave wave = LoadWave(filename.c_str());
+            auto end = std::chrono::high_resolution_clock::now();
+            std::cout << "Load time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << std::endl;
+
+            unsigned int totalSamples = wave.frameCount * 2;
+            audio_data.reserve(totalSamples);
+
+            const short* samples = (short*)wave.data;
+
+            for (size_t i = 0; i < totalSamples; i++) {
+                float sample = static_cast<float>(samples[i]) / 32768.0F * 0.5F;
+                audio_data.push_back(sample);
+            }
+            int totalFrames = (int)audio_data.size();
+
+            std::cout << "totalFrames : " << totalFrames << std::endl;
+            std::cout << "sampleSizes : " << totalSamples << std::endl;
+
+            UnloadWave(wave);
+        }
+        //else
+        //{
+        //    // RAYLIB SOUND LOAD
+        //    auto start = std::chrono::high_resolution_clock::now();
+        //    Sound sound = LoadSound(filename.c_str());
+        //    auto end = std::chrono::high_resolution_clock::now();
+        //    std::cout << "Load time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << std::endl;
+
+        //    unsigned int totalSamples = sound.frameCount * 2;
+        //    audio_data.reserve(totalSamples);
+
+        //    const short* samples = (short*)sound.;
+
+        //    for (size_t i = 0; i < totalSamples; i++) {
+        //        float sample = static_cast<float>(samples[i]) / 32768.0F;
+        //        audio_data.push_back(sample);
+        //    }
+        //    int totalFrames = (int)audio_data.size();
+
+        //    std::cout << "totalFrames : " << totalFrames << std::endl;
+        //    std::cout << "sampleSizes : " << totalSamples << std::endl;
+
+        //    UnloadSound(sound);
+        //}
     }
     int total_frames = (int)audio_data.size();
 
@@ -3115,8 +3175,8 @@ void DrawMainDisplay(Rectangle& panel_main)
 
         float amplitude = std::sqrt((real_num * real_num) + (imaginer * imaginer));
 
-        min_amp = std::min(min_amp, amplitude);
-        max_amp = std::max(max_amp, amplitude);
+        //min_amp = std::min(min_amp, amplitude);
+        //max_amp = std::max(max_amp, amplitude);
     }
 
     for (size_t i = 0; i < N / 2; i++) {
@@ -3530,12 +3590,17 @@ void DrawMainDisplay(Rectangle& panel_main)
         }
 
         Rectangle dest{
-            spectrogram_base_panel.x + (spectrogram_base_panel.width - dest_w) / 2,
-            spectrogram_base_panel.y + (spectrogram_base_panel.height - dest_h) / 2,
-            dest_w,
-            dest_h
+            //(spectrogram_base_panel.x + (spectrogram_base_panel.width - dest_w) / 2),
+            //(spectrogram_base_panel.y + (spectrogram_base_panel.height - dest_h) / 2),
+            //dest_w,
+            //dest_h
+            // Fix OVERFLOW on TOP of Spectrogram Texture in some sizes
+            (float)(int)(spectrogram_base_panel.x + (spectrogram_base_panel.width - dest_w) / 2),
+            (float)(int)(spectrogram_base_panel.y + (spectrogram_base_panel.height - dest_h) / 2),
+            (float)(int)dest_w,
+            (float)(int)dest_h
         };
-        DrawRectangleLinesEx(dest, 0.5F, BLUE);
+        //DrawRectangleLinesEx(dest, 0.5F, BLUE);
         
         Rectangle source{
             0,
@@ -3629,204 +3694,292 @@ void DrawMainDisplay(Rectangle& panel_main)
         }
 
         // DOWNLOAD OR SAVE SPECTROGRAM BUTTON
-        {
-            static float alpha_coef{ 0.0f };
-            bool draw_icon = alpha_coef > 0.0F;
+        //{
+        //    // Strategy:
+        //    // Because raylib use 480 frame per cycle so for sake of consistency for download/save functionality we also use the same size 480.
+        //    // setup matrixAudio with width 480.
+        //    // setup vector fftw in 960. but only fill 480.
+        //    // so the vector fftw out will be 960. but because of fft is mirroring. so only take half, which is 480.
+        //    // setup matrixImage with height 480. and the width is the size of the matrixAudio
+        //    //
 
-            float download_btn_size = 50.0F;
-            Rectangle download_panel
-            {
-                dest.x + dest.width - download_btn_size,
-                dest.y,
-                download_btn_size,
-                download_btn_size
-            };
+        //    static float alpha_coef{ 0.0f };
+        //    bool draw_icon = alpha_coef > 0.0F;
 
-            float pad{ 5.0F };
-            Rectangle download_btn{
-                download_panel.x + (pad * 1),
-                download_panel.y + (pad * 1),
-                download_panel.width - (pad * 2),
-                download_panel.height - (pad * 2),
-            };
+        //    float download_btn_size = 50.0F;
+        //    Rectangle download_panel
+        //    {
+        //        dest.x + dest.width - download_btn_size,
+        //        dest.y,
+        //        download_btn_size,
+        //        download_btn_size
+        //    };
 
-            float pad_button = 35.0F;
-            Rectangle hover_area{ spectrogram_base_panel };
+        //    float pad{ 5.0F };
+        //    Rectangle download_btn{
+        //        download_panel.x + (pad * 1),
+        //        download_panel.y + (pad * 1),
+        //        download_panel.width - (pad * 2),
+        //        download_panel.height - (pad * 2),
+        //    };
 
-            if (CheckCollisionPointRec(mouse_position, hover_area) && IsCursorOnScreen()) {
-                if (alpha_coef <= 1.0F) {
-                    alpha_coef += sqrtf(dt);
-                }
-            }
-            else {
-                if (alpha_coef >= 0.0F) {
-                    alpha_coef -= sqrtf(dt) / 4;
-                }
-            }
+        //    float pad_button = 35.0F;
+        //    Rectangle hover_area{ spectrogram_base_panel };
 
-            DrawRectangleRounded(download_btn, 0.25F, 10, Fade(BLACK, 0.5F * alpha_coef));
+        //    if (CheckCollisionPointRec(mouse_position, hover_area) && IsCursorOnScreen()) {
+        //        if (alpha_coef <= 1.0F) {
+        //            alpha_coef += sqrtf(dt);
+        //        }
+        //    }
+        //    else {
+        //        if (alpha_coef >= 0.0F) {
+        //            alpha_coef -= sqrtf(dt) / 4;
+        //        }
+        //    }
 
-            static std::vector<float> audioDataSpectrogram{};
-            std::vector<float> fftwOutput{};
-            std::vector<Color> imageColor{};
+        //    DrawRectangleRounded(download_btn, 0.25F, 10, Fade(BLACK, 0.5F * alpha_coef));
 
-            Color color{ GRAY };
-            if (CheckCollisionPointRec(mouse_position, download_btn)) {
-                p->spectrogramDownloaded = { data.at(music_play).downloaded };
-                if (!p->spectrogramDownloaded) {
-                    color = WHITE;
-                    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                        // TODO: SAVE SPECTROGRAM
-                        // concept -> load the music using raylib or sfml audio. then try read FFT. Easy Peasy.
+        //    static std::vector<float> audioDataSpectrogram{};
+        //    std::vector<float> fftwOutput{};
+        //    std::vector<Color> imageColor{};
 
-                        //std::vector<float> audioDataSpectrogram{};
+        //    Color color{ GRAY };
+        //    if (CheckCollisionPointRec(mouse_position, download_btn)) {
+        //        p->spectrogramDownloaded = { data.at(music_play).downloaded };
+        //        if (!p->spectrogramDownloaded) {
+        //            color = WHITE;
+        //            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        //                // TODO: SAVE SPECTROGRAM
+        //                // concept -> load the music using raylib or sfml audio. then try read FFT. Easy Peasy.
 
-                        // Load the entire audio for processing (modify for large files)
+        //                //std::vector<float> audioDataSpectrogram{};
 
-                        auto start = std::chrono::high_resolution_clock::now();
-                        sf::SoundBuffer soundBuffer{};
-                        soundBuffer.loadFromFile(data.at(music_play).path);
-                        //std::cout << soundBuffer.getSampleRate() << std::endl;
-                        auto end = std::chrono::high_resolution_clock::now();
-                        std::cout << "load time : "
-                            << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " milliseconds" << std::endl;
-
-
-                        sf::Uint64 total_samples = soundBuffer.getSampleCount();
-                        audioDataSpectrogram.reserve(total_samples);
-
-                        const sf::Int16* samples = soundBuffer.getSamples();
-
-                        for (size_t i = 0; i < total_samples; i++) {
-                            // Convert and push back all samples (no downsampling, only normalization)
-                            float sample = static_cast<float>(samples[i]) / 32768.0F; // assuming 16-bit signed integer.
-                            audioDataSpectrogram.push_back(sample);
-                        }
-                        int total_frames = (int)audioDataSpectrogram.size();
-
-                        //std::cout << "totalFrames : " << total_frames << std::endl;
-                        //std::cout << "sampleSizes : " << total_samples << std::endl;
-
-                        p->spectrogramDownloading = ON;
-
-                        //sdfsdfsdf
-                    }
-                }
+        //                {
+        //                    // SFML LOAD
+        //                    // Load the entire audio for processing (modify for large files)
+        //                    auto start = std::chrono::high_resolution_clock::now();
+        //                    sf::SoundBuffer soundBuffer{};
+        //                    soundBuffer.loadFromFile(data.at(music_play).path);
+        //                    //std::cout << soundBuffer.getSampleRate() << std::endl;
+        //                    auto end = std::chrono::high_resolution_clock::now();
+        //                    std::cout << "load time : "
+        //                        << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " milliseconds" << std::endl;
 
 
-                std::string info{};
-                if (p->spectrogramDownloaded) info = "Save Spectrogram Disabled";
-                else info = "Save Spectrogram Enabled";
-                Tooltip(download_btn, font_visual_mode_child, screen, info);
-            }
+        //                    sf::Uint64 total_samples = soundBuffer.getSampleCount();
+        //                    audioDataSpectrogram.reserve(total_samples);
 
-            // TRY TO DO IT IN WHOLE FIRST
-            if (p->spectrogramDownloading) {
-                size_t window = 480;
+        //                    const sf::Int16* samples = soundBuffer.getSamples();
 
-                {
-                    size_t N = window;
-                    fftw_complex* in = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N * 2);
-                    fftw_complex* out = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N * 2);
-                    fftw_plan plan = fftw_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_MEASURE);
+        //                    for (size_t i = 0; i < total_samples; i++) {
+        //                        // Convert and push back all samples (no downsampling, only normalization)
+        //                        float sample = static_cast<float>(samples[i]) / 32768.0F; // assuming 16-bit signed integer.
+        //                        audioDataSpectrogram.push_back(sample);
+        //                    }
+        //                    int total_frames = (int)audioDataSpectrogram.size();
 
-                    // Use iterators for clarity and flexibility
-                    auto data_begin = audioDataSpectrogram.begin();
-                    auto data_end = audioDataSpectrogram.end();
+        //                    //std::cout << "totalFrames : " << total_frames << std::endl;
+        //                    //std::cout << "sampleSizes : " << total_samples << std::endl;
 
-                    // Loop through the data in windowSize increments
-                    while (data_begin != data_end) {
-                        // Get the remaining data for the current window
-                        auto remaining = std::distance(data_begin, data_end);
-
-                        // Handle the last window (might be smaller than windowSize)
-                        auto window_end = (remaining >= window) ? data_begin + window : data_end;
-
-                        // Process the data in the current window (modify this section)
-                        for (auto it = data_begin; it != window_end; ++it) {
-                            // TODO: FFT
-                            int index = std::distance(data_begin, it);
-                            in[index][0] = *it;
-                        }
-                        fftw_execute(plan);
-
-                        for (size_t i = 0; i < N/2; i++) {
-                            fftwOutput.push_back(out[i][0]);
-                        }
-
-                        // Move to the next window (if applicable)
-                        data_begin = (data_begin != data_end) ? window_end : data_end;
-                    }
-
-                    fftw_destroy_plan(plan);
-
-                    float min_amp_spec = std::numeric_limits<float>::max();  // Or a very large positive value
-                    float max_amp_spec = std::numeric_limits<float>::min();  // Or a very large negative value
-
-                    int check{ 0 };
-                    std::cout << "Check : " << check << std::endl;
-                    check++;
-
-                    for (size_t i = 0; i < fftwOutput.size(); i++) {
-                        float real_num_spec = static_cast<float>(fftwOutput[i]);
-                        float imaginer_spec = static_cast<float>(fftwOutput[i]);
-                        float amplitude_spc = std::sqrt((real_num_spec * real_num_spec) + (imaginer_spec * imaginer_spec));
-                        min_amp_spec = std::min(min_amp_spec, amplitude_spc);
-                        max_amp_spec = std::max(max_amp_spec, amplitude_spc);
-                    }
-                    std::cout << "Check : " << check << std::endl;
-                    check++;
-
-                    for (size_t i = 0; i < fftwOutput.size(); i++) {
-                        float real_num_spec = static_cast<float>(fftwOutput[i]);
-                        float imaginer_spec = static_cast<float>(fftwOutput[i]);
-                        float amplitude_spc = std::sqrt((real_num_spec * real_num_spec) + (imaginer_spec * imaginer_spec));
-
-                        amplitude_spc = normalization(amplitude_spc, min_amp_spec, max_amp_spec);
-                        if (amplitude_spc < 0.1F) amplitude_spc = 0.0F;
-                        imageColor.push_back(SpectrogramColor(amplitude_spc));
-                    }
-                    std::cout << "Check : " << check << std::endl;
-                    check++;
-
-                    //NOT WORKING
-
-                    int imageWidth = ((int)fftwOutput.size() / (window));
-                    Image download{};
-                    download = {
-                        imageColor.data(),
-                        imageWidth,
-                        (int)window,
-                        1,
-                        PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
-                    };
-                    std::string fileExport{ p->spectrogramOutputFolder + data.at(music_play).name + ".png" };
-                    std::cout << "Export : " << fileExport << std::endl;
-                    ExportImage(download, fileExport.c_str());
-
-                    std::cout << "Check : " << check << std::endl;
-                    check++;
-                }
-
-                p->spectrogramDownloading = OFF;
-
-                std::cout << audioDataSpectrogram.size() << std::endl;
-                audioDataSpectrogram.clear();
-                audioDataSpectrogram.shrink_to_fit();
-                std::cout << audioDataSpectrogram.size() << std::endl;
-            }
-
-            // TRY TO DO IT IN MANUAL CONCURRENCY :)
-            //static size_t 
+        //                    p->spectrogramDownloading = ON;
+        //                }
 
 
+        //                //{
+        //                //    // RAYLIB WAVE LOAD
+        //                //    auto start = std::chrono::high_resolution_clock::now();
+        //                //    Wave wave = LoadWave(data.at(music_play).path.c_str());
+        //                //    auto end = std::chrono::high_resolution_clock::now();
+        //                //    std::cout << "Load time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-            {
-                Rectangle source{ 0,0,100,100 };
-                Rectangle dest{ download_btn };
-                DrawTexturePro(TEX_DOWNLOAD, source, dest, {}, 0, Fade(color, alpha_coef));
-            }
-        }
+        //                //    unsigned int totalSamples = wave.frameCount * 2;
+        //                //    audioDataSpectrogram.reserve(totalSamples);
+
+        //                //    const short* samples = (short*)wave.data;
+
+        //                //    for (size_t i = 0; i < totalSamples; i++) {
+        //                //        float sample = static_cast<float>(samples[i]) / 32768.0F;
+        //                //        audioDataSpectrogram.push_back(sample);
+        //                //    }
+
+        //                //    int totalFrames = (int)audioDataSpectrogram.size();
+
+        //                //    std::cout << "totalFrames : " << totalFrames << std::endl;
+        //                //    std::cout << "sampleSizes : " << totalSamples << std::endl;
+
+        //                //    UnloadWave(wave);
+
+        //                //    p->spectrogramDownloading = ON;
+        //                //}
+
+        //            }
+        //        }
+
+
+        //        std::string info{};
+        //        if (p->spectrogramDownloaded) info = "Save Spectrogram Disabled";
+        //        else info = "Save Spectrogram Enabled";
+        //        Tooltip(download_btn, font_visual_mode_child, screen, info);
+        //    }
+
+        //    // TRY TO DO IT IN WHOLE FIRST
+        //    if (p->spectrogramDownloading) {
+        //        size_t window = 480 * 2;
+
+        //        {
+        //            int check{ 0 };
+        //            std::cout << "Check : " << check << std::endl;
+        //            check++;
+
+        //            size_t N = window;
+
+        //            std::cout << "Check : " << check << std::endl;
+        //            check++;
+
+
+        //            size_t width{ audioDataSpectrogram.size() / N };
+        //            size_t rows = width;
+        //            size_t cols = N;
+
+        //            size_t index{ 0 };
+        //            std::vector<std::vector<float>> audioInMatrix(cols, std::vector<float>(rows));
+        //            for (size_t row = 0; row < audioInMatrix.size(); row++) {
+        //                for (size_t col = 0; col < audioInMatrix[row].size(); col++) {
+        //                    audioInMatrix[row][col] = audioDataSpectrogram[index];
+        //                    index++;
+        //                }
+        //            }
+
+        //            std::cout << "\nrows : " << rows;
+        //            std::cout << "\ncosl : " << cols;
+
+        //            std::cout << "\nwidth : " << audioInMatrix[0].size();
+        //            std::cout << "\nheight: " << audioInMatrix.size();
+
+        //            std::vector<std::vector<float>> imageMatrix((480), std::vector<float>{});
+
+        //            for (const auto& row : audioInMatrix) {
+        //                std::vector<fftw_complex> fftwIn(N);
+        //                std::vector<fftw_complex> fftwOut(N);
+        //                for (size_t i = 0; i < row.size()/2; i++) {
+        //                    float left = row[2 * i];
+        //                    float right = row[2 * i + 1];
+        //                    fftwIn[i][0] = (left + right) / 2;
+        //                }
+        //                fftw_plan plan{ fftw_plan_dft_1d(N, fftwIn.data(), fftwOut.data(), FFTW_FORWARD, FFTW_MEASURE) };
+        //                fftw_execute(plan);
+        //                fftw_destroy_plan(plan);
+
+        //                int divider = 2;
+        //                for (size_t i = 0; i < fftwOut.size() / divider; i++) {
+        //                    float real_num = static_cast<float>(fftwOut[i][0]);
+        //                    float imaginer = static_cast<float>(fftwOut[i][1]);
+
+        //                    float amplitude = std::sqrt((real_num * real_num) + (imaginer * imaginer));
+        //                    imageMatrix[(fftwOut.size() / divider) - 1 - i].push_back(amplitude);
+        //                    //imageMatrix.at(i).push_back(amplitude);
+        //                    //std::cout << "Loop : " << i << std::endl;
+        //                }
+
+        //            }
+
+        //            std::cout << "Check : " << check << std::endl;
+        //            check++;
+
+        //            float min_amp_spec = std::numeric_limits<float>::max();  // Or a very large positive value
+        //            float max_amp_spec = std::numeric_limits<float>::min();  // Or a very large negative value
+
+        //            std::cout << "Check : " << check << std::endl;
+        //            check++;
+
+        //            //for (size_t i = 0; i < imageMatrix[0].size(); i++) {
+        //            //    std::cout << imageMatrix[250][i] << " ";
+        //            //}
+        //            //std::cout << std::endl;
+
+        //            std::cout << "image width : " << imageMatrix[0].size() << std::endl;
+        //            std::cout << "image height: " << imageMatrix.size() << std::endl;
+
+
+        //            std::vector<float> imageSerial{};
+        //            for (size_t i = 0; i < imageMatrix.size(); i++) {
+        //                for (const auto& j : imageMatrix.at(i)) {
+        //                    imageSerial.push_back(j);
+        //                }
+        //            }
+
+        //            std::cout << "Check : " << check << std::endl;
+        //            check++;
+
+        //            for (size_t i = 0; i < imageSerial.size(); i++) {
+        //                float amplitude = imageSerial[i];
+        //                min_amp_spec = std::min(min_amp_spec, amplitude);
+        //                max_amp_spec = std::max(max_amp_spec, amplitude);
+        //            }
+        //            std::cout << "Check : " << check << std::endl;
+        //            check++;
+
+        //            for (size_t i = 0; i < imageSerial.size(); i++) {
+        //                float amplitude = imageSerial[i];
+        //                //min_amp_spec = std::min(min_amp_spec, amplitude);
+        //                //max_amp_spec = std::max(max_amp_spec, amplitude);
+
+        //                amplitude = normalization(amplitude, min_amp_spec, max_amp_spec);
+        //                if (amplitude < 0.1F) amplitude = 0.0F;
+        //                imageColor.push_back(SpectrogramColor(amplitude));
+        //            }
+
+        //            std::cout << "Check : " << check << std::endl;
+        //            check++;
+
+        //            //NOT WORKING
+
+        //            //int imageWidth = ((int)fftwOutput.size() / (window));
+        //            Image download{};
+        //            int imageWidth = (int)imageMatrix[0].size();
+        //            int imageHeight = (int)imageMatrix.size();
+        //            download = {
+        //                imageColor.data(),
+        //                imageWidth,
+        //                imageHeight,
+        //                1,
+        //                PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
+        //            };
+
+        //            //ImageFlipVertical(&download);
+        //            std::string fileExport{ p->spectrogramOutputFolder + data.at(music_play).name + ".png" };
+        //            std::cout << "Exporting : " << fileExport << std::endl;
+        //            ExportImage(download, fileExport.c_str());
+        //            std::cout << "Export Successs" << std::endl;
+
+        //            //Image copy = ImageCopy(download);
+        //            //ImageResize(&copy, int(((float)copy.width * 0.75F)), (int)copy.height);
+        //            //fileExport = { p->spectrogramOutputFolder + data.at(music_play).name + "resize" + ".png"};
+        //            //ExportImage(copy, fileExport.c_str());
+
+        //            std::cout << "Check : " << check << std::endl;
+        //            check++;
+        //        }
+
+        //        p->spectrogramDownloading = OFF;
+
+        //        std::cout << audioDataSpectrogram.size() << std::endl;
+        //        audioDataSpectrogram.clear();
+        //        audioDataSpectrogram.shrink_to_fit();
+        //        std::cout << audioDataSpectrogram.size() << std::endl;
+        //    }
+
+        //    // TRY TO DO IT IN MANUAL CONCURRENCY :)
+        //    //static size_t 
+
+
+
+        //    {
+        //        Rectangle source{ 0,0,100,100 };
+        //        Rectangle dest{ download_btn };
+        //        DrawTexturePro(TEX_DOWNLOAD, source, dest, {}, 0, Fade(color, alpha_coef));
+        //    }
+        //}
 
 
     }
