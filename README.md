@@ -53,7 +53,7 @@ Windows Release Version 2.0.0
 - SFML : [https://www.sfml-dev.org](https://www.sfml-dev.org/)
 
 ### Download:
-- Windows-x64 : <a href="https://github.com/UFTHaq/Incognito/releases/download/v.1.0.0/Incognito-v1.0.0-win64.zip">
+- Windows-x64 : <a href="https://github.com/UFTHaq/Tirakat/releases/download/v.2.0.0/Tirakat-v2.0.0-win64.zip">
  Tirakat-v2.0.0-win64
   </a>
 
