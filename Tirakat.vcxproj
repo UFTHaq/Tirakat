@@ -107,14 +107,14 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>D:\Aplikasi\CODING\C &amp; C++\Raylib\raylib-5.0_win64_msvc16\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Aplikasi\CODING\C &amp; C++\Raylib\raylib-5.0_win64_msvc16\include;D:\Aplikasi\CODING\C &amp; C++\FFTW\fftw-3.3.10\include;D:\Aplikasi\CODING\C &amp; C++\SFML\SFML-2.6.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>D:\Aplikasi\CODING\C &amp; C++\Raylib\raylib-5.0_win64_msvc16\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>raylib.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>D:\Aplikasi\CODING\C &amp; C++\Raylib\raylib-5.0_win64_msvc16\lib;D:\Aplikasi\CODING\C &amp; C++\FFTW\fftw-3.3.10\lib;D:\Aplikasi\CODING\C &amp; C++\SFML\SFML-2.6.1\lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>raylib.lib;fftw3.lib;winmm.lib;sfml-system.lib;sfml-audio.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /y "D:\Aplikasi\CODING\C &amp; C++\Raylib\raylib-5.0_win64_msvc16\lib\raylib.dll" "$(TargetDir)"
@@ -129,7 +129,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>D:\Aplikasi\CODING\C &amp; C++\Raylib\raylib-5.0_win64_msvc16\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Aplikasi\CODING\C &amp; C++\Raylib\raylib-5.0_win64_msvc16\include;D:\Aplikasi\CODING\C &amp; C++\FFTW\fftw-3.3.10\include;D:\Aplikasi\CODING\C &amp; C++\SFML\SFML-2.6.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <Optimization>MaxSpeed</Optimization>
       <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -140,8 +140,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>D:\Aplikasi\CODING\C &amp; C++\Raylib\raylib-5.0_win64_msvc16\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>raylib.lib;winmm.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>D:\Aplikasi\CODING\C &amp; C++\Raylib\raylib-5.0_win64_msvc16\lib;D:\Aplikasi\CODING\C &amp; C++\FFTW\fftw-3.3.10\lib;D:\Aplikasi\CODING\C &amp; C++\SFML\SFML-2.6.1\lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>raylib.lib;fftw3.lib;winmm.lib;sfml-system.lib;sfml-audio.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /y "D:\Aplikasi\CODING\C &amp; C++\Raylib\raylib-5.0_win64_msvc16\lib\raylib.dll" "$(TargetDir)"
@@ -160,6 +160,10 @@
   <ItemGroup>
     <Image Include="resources\Icons\Tirakat-V4.ico" />
     <Image Include="resources\Icons\Tirakat-V4.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="resources\shaders\bubble.fs" />
+    <None Include="resources\shaders\circle.fs" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

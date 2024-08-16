@@ -37,4 +37,12 @@
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="resources\shaders\circle.fs">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="resources\shaders\bubble.fs">
+      <Filter>Source Files</Filter>
+    </None>
+  </ItemGroup>
 </Project>
