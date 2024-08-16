@@ -10,7 +10,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-# Tirakat
+# Tirakat : Musializer++
+Music Player and Visualizer Desktop Application
 
 <div align="center">
     <img src="https://github.com/UFTHaq/Tirakat/assets/104829519/5e01e038-0594-4200-b30a-586d3f17c845" width=180/>
@@ -18,83 +19,50 @@
 
 ## Tirakat Demo App
 
-https://github.com/UFTHaq/Tirakat/assets/104829519/38b72c03-ab18-4d67-89af-3bb935e8e13a
+ **<a href="https://youtu.be/Lmv-X-21TbY">
+ ![0815-TirakatYT-Cover](https://github.com/user-attachments/assets/71532a35-0eb3-40a1-91d1-7c71320fdc44)
+ Tirakat Demo App in Youtube
+  </a>**
 
-Windows Alpha Release 1
+Windows Release Version 2.0.0
 --------------------------------------------------------------------------
-Hello! This is the first ever Alpha Release of Tirakat on Windows!
 
-After 2 weeks of active work since i started (actually no, I personally was
-actively working on this only 7 days because i do procastination alot :D). 
-I finally shipped the First Alpha Release of Tirakat on Windows! \o/ Wohoo
+### Skill Issue:
+- I dont know any build system yet (CMake, Makefile, etc), so sorry for dev you need to raw dog the setup yourself to build it.
+- Copy the source code, setup your linking of raylib, sfml audio, fftw3 dll and lib.
 
-Forgive me for my cute English error.
-
-What is Tirakat?
-
-It's a simple audio player that can help you with your spiritual practices.
-With Tirakat, you can play any religious MP3 you want while keeping track 
-of the number of repetitions you've done. For example, if you want to 
-recite Al-Fatihah 313 times, just drag and drop the Al-Fatihah MP3 file 
-into Tirakat. The app will then keep track of your target and play the MP3 
-while counting the number of repetitions you've done.
-
-Tirakat is perfect for people who want to work on their spiritual
-practices while they're using their PC or laptop. You can easily keep
-track of your repetitions while you're working, so you can stay focused
-and motivated, Masyaallah.
-
-Double-click Tirakat.exe. It's not signed or anything cause I don't know
-how to do that. So Your Windows may freak out about that a bit. You just
-have to believe me that I didn't put in 
-viruses in here. At least intentionally...
-
-here is the detail feature:
-
-- Drag&Drop some music onto the window. Only support MP3 format for now.
-  Now can only drag&drop mp3 one by one
-
-- After drop the mp3, it will open popup to set your repetition target. 
-  Click the input white box to activate the input box. 
-  Or you can reset it later in the setting button.
-
-- You can delete your mp3 in setting button.
-
-- It has 2 Mode of playing mp3, repeat and play all song.
-
-- It will count as plus 1 if you play it more than 80% of the mp3.
-  And will add it in the last 0.5 seconds.
-
-- It has slider to mp3 timeline. And you can jump and drag it to any place 
-  of the song during playing. You can also control it using left and right 
-  arrow of your keyboard to move -5 or +5 seconds.
-
-- It has Play/Pause Button. And you can also press Space to Pause/Unpause.
-
-- It has Volume Control. It controls the volume during playing mp3.
-
-- It has Fullscreen Button that hides all of the controls and make it clean.
-
-- Simple, lightweight and easy to use app.
-
-- Don't expect too much from this application! It's not even Beta yet!
-
-- The full source code is available at
-  https://github.com/UFTHaq/Tirakat
-
-- Have fun!
-
-<br></br>
+### Features:
+- Drag&Drop music (MP3 & WAV).
+- All Features in Common Music Player.
+- Time Domain Visualization.
+- Frequency Domain Visualization.
+- Multiple Styles Mode of Visualization.
+- WAVE, CLASSIC, GALAXY, LANDSCAPE & SPECTROGRAM.
+- Tooltip for Every Buttons.
+- Right Click in Playlist to Open Options.
+- Left Click Hold + drag to Rearrange the Playlists.
+- Notifications for Add music (Success & Failed) and for Deleting Music.
+- Fixing all bugs i know.
 
 ### Build with:
 - C++17 in MSVC Visual Studio C++ 2022
 
-### Dependencies:
-- Raylib : [https://www.raylib.com/](https://www.raylib.com/)
-- SFML : [https://www.sfml-dev.org/index.php](https://www.sfml-dev.org/)
-- FFTW3 : [https://www.fftw.org/](https://www.fftw.org/)
+### Libraries:
+- Raylib : [https://www.raylib.com](https://www.raylib.com/)
+- FFTW3 : [https://www.fftw.org](https://www.fftw.org/)
+- SFML : [https://www.sfml-dev.org](https://www.sfml-dev.org/)
 
-https://youtu.be/Lmv-X-21TbY
+### Download:
+- Windows-x64 : <a href="https://github.com/UFTHaq/Incognito/releases/download/v.1.0.0/Incognito-v1.0.0-win64.zip">
+ Tirakat-v2.0.0-win64
+  </a>
+
+### Known Issues / Bugs:
+- The window startup is broken when using 2 monitors in extended mode,
+- at least in my setup (laptop + second monitor). This could be a Raylib or Windows issue.
+
+### Next Possible Features:
+- Save / Download Spectrogram Image of Music.
 
 <br></br>
 
