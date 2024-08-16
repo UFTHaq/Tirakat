@@ -152,12 +152,9 @@
 #define PANEL_PROGRESS_HEIGHT_FULLSCREEN_OFFSCREEN  5.0F
 #define PANEL_LINE_THICK                            2.0F // 4.0F
 
-//#define BASE_COLOR                  Color{  20,  20,  20, 255 }
 #define BASE_COLOR                  Color{  10,  10,  10, 255 }
 #define PANEL_COLOR                 Color{  30,  30,  30, 255 }
 #define PANEL_LEFT_COLOR            Color{  40,  40,  40, 255 }
-#define PANEL_COLOR2                Color{  30,  30,  30, 255 }
-//#define PANEL_LINE_COLOR            Color{  20,  20,  20, 255 }
 #define PANEL_LINE_COLOR            Color{  30,  30,  30, 180 }
 #define PANEL_PROGRESS_BASE_COLOR   Color{  25,  25,  25, 255 }
 #define PANEL_PROGRESS_COLOR        DARKGRAY
@@ -165,9 +162,7 @@
 #define CONTENT_COLOR               Color{  60,  60,  63, 255 }
 #define CONTENT_CHOOSE_COLOR        Color{ 150, 150, 153, 255 }
 #define CONTENT_OPTION_COLOR        Color{ 190,  76,  45, 255 }
-//#define CONTENT_CHOOSE_COLOR        Color{ 190,  76,  45, 255 }
 #define CONTENT_REARRANGE_COLOR     Color{  12,  82, 162, 255 }
-//#define CONTENT_REARRANGE_COLOR     Color{DARKBLUE}
 
 #define BLUE_BUTTON_COLOR           Color{  58,  76, 131, 255 }
 #define POPUP_CARD_COLOR            Color{ 112, 141, 225, 255 }
@@ -190,6 +185,72 @@
 
 const int N{ 480 * 2 };
 
+struct TirakatColorPalette {
+    Color PanelColorBase{};
+    Color PanelColorFunctionality{};
+    Color PanelColorPlaylistBase{};
+    Color PanelColorBaseProgress{};
+    Color PanelColorProgress{};
+    Color PanelColorLine{};
+
+    Color PlaylistColor{};
+    Color PlaylistColorHover{};
+    Color PlaylistColorChoosen{};
+    Color PlaylistColorOption{};
+    Color PlaylistColorRearranging{};
+};
+
+TirakatColorPalette ColorPalette1{
+    BASE_COLOR,
+    PANEL_COLOR,
+    PANEL_LEFT_COLOR,
+    PANEL_PROGRESS_BASE_COLOR,
+    PANEL_PROGRESS_COLOR,
+    PANEL_LINE_COLOR,
+
+    CONTENT_COLOR,
+    DARKGRAY,
+    CONTENT_CHOOSE_COLOR,
+    CONTENT_OPTION_COLOR,
+    CONTENT_REARRANGE_COLOR
+};
+
+TirakatColorPalette ColorPalette2{
+    Color{  10,  12,  13, 255 },
+    Color{  30,  32,  35, 255 },
+    Color{  40,  42,  45, 255 },
+    Color{  25,  27,  30, 255 },
+    Color{  80,  82,  85, 255 },
+    Color{  23,  25,  28, 255 },
+
+    Color{  60,  62,  66, 255 },
+    Color{  79,  81,  85, 225 },
+    Color{ 150, 152, 155, 255 },
+    Color{ 190,  76,  45, 255 },
+    Color{  12,  82, 142, 255 }
+};
+
+TirakatColorPalette ColorPalette3_OBS{
+    Color{  10,  12,  15, 255 },
+    Color{  30,  32,  41, 255 },
+    Color{  43,  45,  54, 255 },
+    Color{  24,  26,  37, 255 },
+    Color{  70,  72,  75, 255 },
+    Color{  20,  21,  25, 255 },
+
+    Color{  60,  62,  71, 255 },
+    Color{  85,  88,  95, 225 },
+    Color{ 150, 152, 155, 255 },
+    Color{ 190,  76,  45, 255 },
+    Color{  12,  82, 142, 255 }
+};
+
+TirakatColorPalette ColorPaletteUsed{};
+
+//TirakatColorPalette ColorPaletteUsed{ ColorPalette1 };
+//TirakatColorPalette ColorPaletteUsed{ ColorPalette2 };
+//TirakatColorPalette ColorPaletteUsed{ ColorPalette3_OBS };
+
 enum Page {
     PAGE_DRAG_DROP,
     PAGE_MAIN
@@ -198,7 +259,7 @@ enum Page {
 enum Drag {
     DRAG_MUSIC_PROGRESS,
     DRAG_VOLUME,
-    DRAG_CONTENT,
+    DRAG_SCROLLBAR,
     DRAG_RELEASE
 };
 
@@ -320,7 +381,8 @@ struct Plug {
     size_t option_music_order{};
     bool visual_mode_expand{ OFF };
     std::vector<VisualMode> visualmode{ visualM1, visualM2, visualM3, visualM4, visualM5 };
-    size_t visual_mode_active{ SPECTROGRAM };
+    //size_t visual_mode_active{ SPECTROGRAM };
+    size_t visual_mode_active{ WAVE };
     bool toggle_windowed_wave{ true };
     Notification notification{};
     float mouse_onscreen_timer{ HUD_TIMER_SECS };
@@ -862,7 +924,7 @@ void DrawVisualTimeDomainProgress(Rectangle& panel, float progress_w);
 
 void DrawMedia(Rectangle& panel_media);
 
-void DrawVolume(Rectangle& panel_playpause, float button_panel);
+void DrawVolume(Rectangle& panel_playpause, float button_panel, Rectangle& panel_media);
 
 void DrawMusicList(Rectangle& panel_left, int& retFlag);
 
@@ -1026,6 +1088,7 @@ size_t music_play{};
 const std::filesystem::path data_dir{ "resources/Data" };
 const std::filesystem::path data_txt{ "resources/Data/data.txt" };
 bool zero_data{false};
+bool start_at_zero_still_valid{};
 Font* font = nullptr;
 
 Font font_m{};
@@ -1090,7 +1153,8 @@ std::vector<Vector2> splines_pointer_smart(BUCKETS);
 std::vector<Color> spectrogram_zone_out(p->spectrogram_zone_out_w * p->spectrogram_h);
 std::vector<Vector2> audio_wave_live(wave_live.size());
 
-int main()
+//int main()
+int WinMain()
 {
     //landscape_splines.reserve(BUCKETS * 60);
 
@@ -1098,7 +1162,8 @@ int main()
     std::cout << "Hello World!\n";
     std::cout << "RAYLIB VERSION: " << RAYLIB_VERSION << std::endl;
 
-    screen = { 1000, 600 };
+    //screen = { 1000, 600 };
+    screen = { 1200, 700 };
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_ALWAYS_RUN);
     SetConfigFlags(FLAG_MSAA_4X_HINT);
@@ -1200,7 +1265,7 @@ int main()
 
     }
 
-    SetMasterVolume(0.1F);
+    SetMasterVolume(0.8F);
     p->dragging = DRAG_RELEASE;
 
     make_bins();
@@ -1208,20 +1273,32 @@ int main()
     while (!WindowShouldClose()) {
         SetWindowMinSize(1000, 600);
 
+        //ColorPaletteUsed = ColorPalette1;
+        ColorPaletteUsed = ColorPalette2;
+        //ColorPaletteUsed = ColorPalette3_OBS;
+
         if (zero_data == true) {
             p->page = PAGE_DRAG_DROP;
+            music_play = INT_MAX;
         }
         else {
             p->page = PAGE_MAIN;
         }
 
         if (IsFileDropped()) {
+            // TODO: Need to LoadMP3 in multithread so it not blocked the music playing.
             LoadMP3();
+            if (data.size() == 1 || start_at_zero_still_valid) {
+                if (music_play != INT_MAX) {
+                    time_domain_signal = ExtractMusicData(data.at(music_play).path);
+                    start_at_zero_still_valid = false;
+                }
+            }
         }
 
 
         BeginDrawing();
-        ClearBackground(Fade(BASE_COLOR, 0.5F));
+        ClearBackground(Fade(ColorPaletteUsed.PanelColorBase, 0.5F));
 
         mouse_position = GetMousePosition();
 
@@ -1278,8 +1355,8 @@ void DrawDragDropPopupTray()
             tray.updateAll();
 
             float popup_w = 275;
-            float popup_h = 60;
-            float space = 15;
+            float popup_h = 50;
+            float space = 12.5F;
             float alpha = tray.alpha;
             float coef_moving = sqrtf(tray.getSlideUp());
             Rectangle popup_rect{
@@ -1294,36 +1371,41 @@ void DrawDragDropPopupTray()
 
             if (tray.getInfo() == SUCCESS)
             {
-                color_bg = DARKGREEN;
-                text_cpp = "Success load \"" + tray.name + "\"";
+                //color_bg = DARKGREEN;
+                color_bg = { 60, 145, 75, 255 };
+                text_cpp = "Success load : " + tray.name;
             }
             else if (tray.getInfo() == FAILED)
             {
-                color_bg = RED;
-                text_cpp = "Couldn't load \"" + tray.name + "\"";
+                //color_bg = RED;
+                color_bg = { 230, 45, 55, 255 };
+                text_cpp = "Failed load : " + tray.name;
             }
             else if (tray.getInfo() == DELETE)
             {
                 //color_bg = DARKBLUE;
-                color_bg = { 190, 76, 45, 255 };
-                text_cpp = "Deleting \"" + tray.name + "\"";
+                color_bg = { 50, 55, 70, 255 };
+                text_cpp = "Deleting : " + tray.name;
 
             }
 
             // Draw Rect
-            DrawRectangleRounded(popup_rect, 0.2F, 10, Fade(color_bg, alpha));
-            DrawRectangleRoundedLines(popup_rect, 0.2F, 10, 3.0F, Fade(color_bg, alpha * 0.4F));
+            DrawRectangleRounded(popup_rect, 0.15F, 10, Fade(color_bg, alpha));
+            //DrawRectangleRoundedLines(popup_rect, 0.15F, 10, 1.0F, Fade(DARKGRAY, alpha * 0.8F));
+
             // Draw Text
             font = &font_s_reg;
+            font = &font_visual_mode_child;
             Color font_color = WHITE;
-            float font_size = popup_rect.height * 0.5F;
-            float font_space = -0.5F;
+            float font_size = popup_rect.height * 0.57F;
+            float font_space = -0.25F;
             float width_text = popup_rect.width * 0.9F;
             text_cpp = TrimDisplayString(text_cpp, width_text, font_size, font_space, EASY);
             const char* text = text_cpp.c_str();
             Vector2 text_measure = MeasureTextEx(*font, text, font_size, font_space);
             Vector2 text_coor{
-                popup_rect.x + (popup_rect.width - text_measure.x) / 2,
+                //popup_rect.x + (popup_rect.width - text_measure.x) / 2, // Center Align
+                popup_rect.x + 13, // Left Align
                 popup_rect.y + (popup_rect.height - text_measure.y) / 2
             };
             DrawTextEx(*font, text, text_coor, font_size, font_space, Fade(font_color, alpha));
@@ -1514,7 +1596,7 @@ bool Check_StartUp_Page()
 
 void DrawDragDropPage(ScreenSize screen)
 {
-    const char* text = "Drag&Drop MP3 Here";
+    const char* text = "Drag&Drop Music Here";
     float font_size = 55;
     float font_space = 1;
     Color font_color = RAYWHITE;
@@ -1659,7 +1741,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
         static bool repetition_saved = false;
         if (repetition_saved == false) {
 
-            if (music_time_now >= (music_duration - 10)) {
+            if (music_time_now >= (music_duration - 20)) {
             //if (GetMusicTimePlayed(music) >= (millisecondsToSeconds(music_duration) - 0.05F)) {
 
                 PauseMusicStream(music);
@@ -1757,8 +1839,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             panel_main.width,
             panel_progress_height,
         };
-        //DrawRectangleRec(panel_progress, PANEL_COLOR);
-        DrawRectangleRec(panel_progress, PANEL_PROGRESS_BASE_COLOR);
+        DrawRectangleRec(panel_progress, ColorPaletteUsed.PanelColorBaseProgress);
 
         if (p->mouse_onscreen == ON || p->visual_time_domain_lock == ON) {
             float pad_time_domain = 7.5F;
@@ -1777,7 +1858,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             screen.w,
             PANEL_LINE_THICK
         };
-        DrawRectangleRec(panel_horizontal_line, PANEL_LINE_COLOR);
+        DrawRectangleRec(panel_horizontal_line, ColorPaletteUsed.PanelColorLine);
 
         //// BLOCK DRAWING
 
@@ -1792,9 +1873,6 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             DrawPopUpReset(panel_main);
         }
 
-
-        
-
     }
 
 
@@ -1808,7 +1886,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             PANEL_MEIDA_WIDTH,
             PANEL_MEDIA_HEIGHT
         };
-        DrawRectangleRec(panel_media, PANEL_COLOR);
+        DrawRectangleRec(panel_media, ColorPaletteUsed.PanelColorFunctionality);
 
         float pad_duration = 15.0F;
         Rectangle panel_media_draw = {
@@ -1825,7 +1903,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             screen.w,
             PANEL_LINE_THICK
         };
-        DrawRectangleRec(panel_horizontal_line, PANEL_LINE_COLOR);
+        DrawRectangleRec(panel_horizontal_line, ColorPaletteUsed.PanelColorLine);
 
         // PANEL DURATION
         panel_duration = {
@@ -1834,7 +1912,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             PANEL_DURATION_WIDTH,
             PANEL_DURATION_HEIGHT
         };
-        DrawRectangleRec(panel_duration, PANEL_COLOR);
+        DrawRectangleRec(panel_duration, ColorPaletteUsed.PanelColorFunctionality);
 
         // PANEL LEFT
         panel_left = {
@@ -1843,7 +1921,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             PANEL_LEFT_WIDTH,
             screen.h - panel_media.height - panel_horizontal_line.height - panel_duration.height
         };
-        DrawRectangleRec(panel_left, PANEL_LEFT_COLOR);
+        DrawRectangleRec(panel_left, ColorPaletteUsed.PanelColorPlaylistBase);
 
         // PANEL MUSIC LIST
         float top_bottom_pad{ 53.0F * 0.10F };
@@ -1853,7 +1931,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             panel_left.width,
             panel_left.height - (top_bottom_pad * 2 + 1)
         };
-        DrawRectangleRec(panel_music_list, PANEL_LEFT_COLOR);
+        DrawRectangleRec(panel_music_list, ColorPaletteUsed.PanelColorPlaylistBase);
 
         // PANEL VERTICAL LINE
         panel_vertical_line = {
@@ -1862,7 +1940,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             PANEL_LINE_THICK,
             screen.h
         };
-        DrawRectangleRec(panel_vertical_line, PANEL_LINE_COLOR);
+        DrawRectangleRec(panel_vertical_line, ColorPaletteUsed.PanelColorLine);
 
         // PANEL MAIN
         panel_main = {
@@ -1879,8 +1957,7 @@ void DrawMainPage(ScreenSize screen, int& retFlag)
             panel_main.width,
             PANEL_PROGRESS_HEIGHT,
         };
-        //DrawRectangleRec(panel_progress, PANEL_COLOR);
-        DrawRectangleRec(panel_progress, PANEL_PROGRESS_BASE_COLOR);
+        DrawRectangleRec(panel_progress, ColorPaletteUsed.PanelColorBaseProgress);
 
         float pad_time_domain = 7.5F;
         panel_progress = {
@@ -2256,7 +2333,7 @@ void DrawPopUpReset(Rectangle& panel_main)
 void DrawVisualTimeDomainProgress(Rectangle& panel, float progress_w)
 {
     float progress = progress_w + panel.x;
-    Color color = DARKGRAY;
+    Color color = ColorPaletteUsed.PanelColorProgress;
     float alpha = 0.5F;
 
     // DRAW GRAY LINE
@@ -2304,6 +2381,8 @@ void DrawVisualTimeDomainProgress(Rectangle& panel, float progress_w)
 
 void DrawMedia(Rectangle& panel_media)
 {
+    //DrawRectangleRec(panel_media, RED);
+
     // PLAY PAUSE BUTTON
     float button_panel = panel_media.height;
     float pad = 3.0F;
@@ -2313,6 +2392,8 @@ void DrawMedia(Rectangle& panel_media)
         button_panel,
         button_panel
     };
+    //DrawRectangleRec(panel_playpause, RED);
+
     Rectangle button_playpause{
         panel_playpause.x + (pad * 1),
         panel_playpause.y + (pad * 1),
@@ -2322,24 +2403,31 @@ void DrawMedia(Rectangle& panel_media)
     DrawPlayPause(button_playpause, panel_playpause);
 
     // VOLUME BUTTON
-    DrawVolume(panel_playpause, button_panel);
+    DrawVolume(panel_playpause, button_panel, panel_media);
 }
 
-void DrawVolume(Rectangle& panel_playpause, float button_panel)
+void DrawVolume(Rectangle& panel_playpause, float button_panel, Rectangle& panel_media)
 {
     volume = { GetMasterVolume() };
     bool volume_btn_clicked{ false };
     //static bool HUD_toggle = false;
     static bool HUD_toggle = true;
 
-    float volume_slider_length_base = 170.0F;
+    //float volume_slider_length_base = 170.0F;
+    float volume_slider_length_base = (panel_media.width) - (panel_playpause.width * 2);
+    static bool a = false;
+    if (a == false) {
+        std::cout << volume_slider_length_base << std::endl;
+        a = true;
+    }
+
     Rectangle panel_volume_base{
         panel_playpause.x + panel_playpause.width,
         panel_playpause.y,
         panel_playpause.width + volume_slider_length_base,
         panel_playpause.height
     };
-    //DrawRectangleRec(panel_volume_base, RED);
+    //DrawRectangleRec(panel_volume_base, BLUE);
 
     Rectangle panel_volume{
         panel_volume_base.x,
@@ -2347,6 +2435,7 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
         button_panel,
         button_panel
     };
+    //DrawRectangleRec(panel_volume, WHITE);
 
     float pad = 5.0F;
     Rectangle button_volume{
@@ -2355,9 +2444,10 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
         panel_volume.width - (pad * 2),
         panel_volume.height - (pad * 2),
     };
+    //DrawRectangleRec(button_volume, BLACK);
 
     Color icon_color = GRAY;
-    if (CheckCollisionPointRec(mouse_position, panel_volume)) {
+    if (CheckCollisionPointRec(mouse_position, panel_volume) && IsCursorOnScreen()) {
         icon_color = RAYWHITE;
         HUD_toggle = true;
 
@@ -2422,7 +2512,7 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
         //DrawRectangleRec(volume_slider_panel, RED);
 
         // SLIDER DRAW - START
-        float padding_slider = 50.0F;
+        float padding_slider = 40.0F;
         float volume_slider_w = volume_slider_length_base - padding_slider;
         float volume_slider_h = button_panel * 0.15F;
         float vol_ratio = static_cast<float>(volume_slider_w) / 1;
@@ -2435,8 +2525,8 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
             static_cast<float>(volume_slider_w),
             volume_slider_h
         };
-        DrawRectangleRounded(volume_slider_outer, 0.7F, 5, BASE_COLOR);
-        DrawRectangleRoundedLines(volume_slider_outer, 0.7F, 5, 3.0F, BASE_COLOR);
+        DrawRectangleRounded(volume_slider_outer, 0.7F, 5, ColorPaletteUsed.PanelColorBase);
+        DrawRectangleRoundedLines(volume_slider_outer, 0.7F, 5, 3.0F, ColorPaletteUsed.PanelColorBase);
 
         Rectangle volume_slider{
             volume_slider_panel.x + (padding_slider * 0.5F),
@@ -2450,13 +2540,13 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
         int circle_center_x = static_cast<int>(volume_slider.x) + static_cast<int>(volume_slider.width);
         int circle_center_y = static_cast<int>(volume_slider.y) + static_cast<int>(volume_slider.height / 2) + 1;
         float radius = 6.0F;
-        DrawCircle(circle_center_x, circle_center_y, radius + 5, BASE_COLOR);
+        DrawCircle(circle_center_x, circle_center_y, radius + 5, ColorPaletteUsed.PanelColorBase);
         DrawCircle(circle_center_x, circle_center_y, radius, LIGHTGRAY);
         // SLIDER DRAW - END
 
 
         // DRAG
-        bool inSlider = (CheckCollisionPointRec(mouse_position, volume_slider_panel));
+        bool inSlider = (CheckCollisionPointRec(mouse_position, volume_slider_panel) && IsCursorOnScreen() || p->dragging == DRAG_VOLUME);
         if (inSlider) {
 
             std::string info{ "Volume " + std::to_string(static_cast<int>(volume * 100)) + "%"};
@@ -2473,7 +2563,7 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
 
             }
             else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-                if (p->dragging != DRAG_MUSIC_PROGRESS) {
+                if (p->dragging == DRAG_RELEASE) {
                     p->dragging = DRAG_VOLUME;
                 }
             }
@@ -2503,30 +2593,8 @@ void DrawVolume(Rectangle& panel_playpause, float button_panel)
             }
         }
 
-        // MASIH NGEBUG - PERLU PENYELIDIKAN LEBIH LANJUT - Mungkin perlu di taruh di mainPage function bukan disini
-        //if (inSlider) p->mouse_cursor = MOUSE_CURSOR_POINTING_HAND;
-        //else p->mouse_cursor = MOUSE_CURSOR_DEFAULT;
-
-
     }
 
-
-    // Mungkin perlu di hapus, tidak diperlukan lagi di versi ini
-    // OUTSIDE OF HUD
-    //bool outVolumeBase = !(CheckCollisionPointRec(mouse_position, panel_volume_base));
-    //if (outVolumeBase) {
-    //    //HUD_toggle = false;
-    //}
-
-    //if (p->dragging == DRAG_VOLUME) {
-    //    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && outVolumeBase) {
-    //        HUD_toggle = true;
-    //    }
-    //    else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && outVolumeBase) {
-    //        HUD_toggle = false;
-    //        p->dragging = DRAG_RELEASE;
-    //    }
-    //}
 }
 
 void DrawMusicList(Rectangle& panel, int& retFlag)
@@ -2617,7 +2685,7 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
         };
         //DrawRectangleRec(content, GRAY);
 
-        Color color_content = CONTENT_COLOR;
+        Color color_content = ColorPaletteUsed.PlaylistColor;
         Color color_font = RAYWHITE;
 
         if (CheckCollisionPointRec(mouse_position, panel_list_boundary)) {
@@ -2628,8 +2696,8 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
             int double_click_threshold = 200;
 
             if (p->dragging == DRAG_RELEASE) {
-                if (CheckCollisionPointRec(mouse_position, content)) {
-                    if (!hold) color_content = DARKGRAY;
+                if (CheckCollisionPointRec(mouse_position, content) && IsCursorOnScreen()) {
+                    if (!hold) color_content = ColorPaletteUsed.PlaylistColorHover;
 
                     static bool double_click_detected{ false };
                     static clock_t last_click_time{ 0 };
@@ -2677,6 +2745,8 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                     }
                 }
 
+                bool in_playlist_boundary{ false };
+
 
                 if (CheckCollisionPointRec(mouse_position, moving_boundary)) {
 
@@ -2703,8 +2773,9 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                         if (hold == true) {
 
                             if (selected_index == i) {
-                                color_content = CONTENT_REARRANGE_COLOR;
+                                color_content = ColorPaletteUsed.PlaylistColorRearranging;
                             }
+
 
                             delta_y_mouse_down = (y_while_selected - content_scroll) - mouse_position.y;
                             int moving = int(delta_y_mouse_down / content_boundary.height);
@@ -2737,7 +2808,6 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                             Vector2 start = { content.x + (content.width * 0.05F), line_y };
                             Vector2 end = { content.x + content.width - (content.width * 0.05F), line_y };
                             DrawLineEx(start, end, 2.0F, WHITE);
-                            //DrawLineEx(start, end, 2.0, CONTENT_REARRANGE_COLOR);
 
                             if (scrollable) {
 
@@ -2808,15 +2878,13 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
         }
 
         if (i == music_play) {
-            color_content = CONTENT_CHOOSE_COLOR;
+            color_content = ColorPaletteUsed.PlaylistColorChoosen;
             color_font = BLACK;
         }
 
         if (p->option_status == ON) {
             if (i == p->option_music_order) {
-                //color_content = ORANGE;
-                color_content = CONTENT_OPTION_COLOR;
-                //color_content = { 105, 220, 57, 127 };
+                color_content = ColorPaletteUsed.PlaylistColorOption;
             }
         }
 
@@ -2977,21 +3045,24 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
             scroll_bar_area.width,
             scroll_bar_area.height * t
         };
-        DrawRectangleRounded(scroll_bar_boundary, 0.7F, 10, CONTENT_COLOR);
+        //DrawRectangleRounded(scroll_bar_boundary, 0.7F, 10, ColorPaletteUsed.PlaylistColor);
+        Color scrollbarColor = ColorPaletteUsed.PlaylistColor;
 
         if (scrolling) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                 scrolling = false;
+                p->dragging = DRAG_RELEASE;
             }
-
+            scrollbarColor = ColorPaletteUsed.PlaylistColorRearranging;
         }
         else {
             if (CheckCollisionPointRec(mouse_position, scroll_bar_boundary)) {
-
+                scrollbarColor = ColorPaletteUsed.PlaylistColorHover;
 
                 if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     scrolling = true;
                     scrolling_mouse_offset = mouse_position.y - scroll_bar_boundary.y;
+                    p->dragging = DRAG_SCROLLBAR;
                 }
             }
             else if (CheckCollisionPointRec(mouse_position, scroll_bar_area)) {
@@ -3005,6 +3076,9 @@ void DrawMusicList(Rectangle& panel, int& retFlag)
                 }
             }
         }
+
+
+        DrawRectangleRounded(scroll_bar_boundary, 0.7F, 10, scrollbarColor);
     }
 }
 
@@ -3036,7 +3110,9 @@ std::string TrimDisplayString(std::string& cpp_text, float text_width_limit, flo
 void DeleteMusic(int& retFlag, size_t order)
 {
     if (order >= 0 && order < data.size()) {
-        p->DragDropPopupTray.emplace_front(data.at(order).name, DELETE); // use emplace front not push front because it construct the object directly, while push is contruct then move or copy, double step.
+        std::filesystem::path filePath = data.at(order).path;
+        //p->DragDropPopupTray.emplace_front(data.at(order).name, DELETE); // use emplace front not push front because it construct the object directly, while push is contruct then move or copy, double step.
+        p->DragDropPopupTray.emplace_front(filePath.filename().string(), DELETE); // use emplace front not push front because it construct the object directly, while push is contruct then move or copy, double step.
         for (auto& i : p->DragDropPopupTray) i.resetSlideUp();
 
         data.erase(data.begin() + order);
@@ -3167,17 +3243,17 @@ void DrawMainDisplay(Rectangle& panel_main)
         Spectrum.at(i) = 0.0F;
     }
 
-    float min_amp = std::numeric_limits<float>::max();  // Or a very large positive value
-    float max_amp = std::numeric_limits<float>::min();  // Or a very large negative value
-    for (size_t i = 0; i < N / 2; i++) {
-        float real_num = static_cast<float>(fftw_out[i][0]);
-        float imaginer = static_cast<float>(fftw_out[i][1]);
+    //float min_amp = std::numeric_limits<float>::max();  // Or a very large positive value
+    //float max_amp = std::numeric_limits<float>::min();  // Or a very large negative value
+    //for (size_t i = 0; i < N / 2; i++) {
+    //    float real_num = static_cast<float>(fftw_out[i][0]);
+    //    float imaginer = static_cast<float>(fftw_out[i][1]);
 
-        float amplitude = std::sqrt((real_num * real_num) + (imaginer * imaginer));
+    //    float amplitude = std::sqrt((real_num * real_num) + (imaginer * imaginer));
 
-        //min_amp = std::min(min_amp, amplitude);
-        //max_amp = std::max(max_amp, amplitude);
-    }
+    //    min_amp = std::min(min_amp, amplitude);
+    //    max_amp = std::max(max_amp, amplitude);
+    //}
 
     for (size_t i = 0; i < N / 2; i++) {
         float real_num = static_cast<float>(fftw_out[i][0]);
@@ -4063,7 +4139,7 @@ void DrawMainDisplay(Rectangle& panel_main)
                 }
             }
 
-            DrawRectangleRounded(toggle_btn, 0.25F, 10, Fade(LIGHTGRAY, 0.10F * alpha_coef));
+            DrawRectangleRounded(toggle_btn, 0.25F, 10, Fade(LIGHTGRAY, 0.20F * alpha_coef));
 
             if (CheckCollisionPointRec(mouse_position, toggle_btn)) {
                 if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -4152,7 +4228,8 @@ void DrawMainDisplay(Rectangle& panel_main)
             }
         }
 
-        DrawRectangleRounded(toggle_btn, 0.25F, 10, Fade(LIGHTGRAY, 0.10F * alpha_coef));
+        DrawRectangleRounded(toggle_btn, 0.25F, 10, Fade(LIGHTGRAY, 0.20F * alpha_coef));
+        DrawRectangleRoundedLines(toggle_btn, 0.25F, 10, 1.5F, Fade(BLACK, 0.25F * alpha_coef));
 
 
         if (CheckCollisionPointRec(mouse_position, toggle_btn)) {
@@ -4356,9 +4433,8 @@ void DrawVisualModeButton(Rectangle& panel_main, float dt)
             visual_mode_btn_height
         };
     
-        if ((p->visual_mode_expand == ON) || (CheckCollisionPointRec(mouse_position, visual_mode_panel))) {
-            DrawRectangleRounded(visual_mode_panel, 0.2F, 10, Fade(button_color, 0.5F * alpha_coef));
-        }
+        //if ((p->visual_mode_expand == ON) || (CheckCollisionPointRec(mouse_position, visual_mode_panel) && IsCursorOnScreen())) {
+        //}
     
         const char* text = "Visual Mode";
         float font_coef = 0.65F;
@@ -4369,7 +4445,8 @@ void DrawVisualModeButton(Rectangle& panel_main, float dt)
             visual_mode_panel.x + space * 1.25F,
             visual_mode_panel.y + (visual_mode_panel.height - text_measure.y) / 2
         };
-        if (CheckCollisionPointRec(mouse_position, visual_mode_panel) || p->visual_mode_expand == ON) {
+        if ((CheckCollisionPointRec(mouse_position, visual_mode_panel) && IsCursorOnScreen()) || p->visual_mode_expand == ON) {
+            DrawRectangleRounded(visual_mode_panel, 0.2F, 10, Fade(button_color, 0.5F * alpha_coef));
             DrawTextEx(*font, text, text_coor, font_size, font_space, Fade(WHITE, alpha_coef));
         }
     
@@ -4726,16 +4803,16 @@ void DrawMusicProgress(Rectangle& panel_progress, float& music_volume)
         progress_w,
         panel_progress.height
     };
-    Color progress_color_hover = PANEL_PROGRESS_COLOR;
+    Color progress_bar_color = ColorPaletteUsed.PanelColorProgress;
 
     // DRAW TIME DOMAIN VISUAL OR DRAW TIME BAR ONLY
     if (p->fullscreen) {
-        if (p->mouse_onscreen == OFF && p->visual_time_domain_lock == OFF) DrawRectangleRec(progress_bar, progress_color_hover);
+        if (p->mouse_onscreen == OFF && p->visual_time_domain_lock == OFF) DrawRectangleRec(progress_bar, progress_bar_color);
         else DrawVisualTimeDomainProgress(panel_progress, progress_w);
     }
     else DrawVisualTimeDomainProgress(panel_progress, progress_w);
 
-    if (p->dragging != DRAG_VOLUME) {
+    if (p->dragging == DRAG_RELEASE) {
         if (CheckCollisionPointRec(mouse_position, panel_progress)) {
 
             if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -4924,7 +5001,6 @@ bool Save()
                 << entry.name << ","
                 << entry.target << ","
                 << entry.counter << ","
-                //<< entry.duration << std::endl;
                 << entry.duration << ","
                 << entry.downloaded << std::endl;
         }
@@ -4938,7 +5014,7 @@ bool Save()
 void DrawPlayPause(const Rectangle& play_rect, const Rectangle& hover_panel)
 {
     Color icon_color = GRAY;
-    if (CheckCollisionPointRec(mouse_position, hover_panel)) {
+    if (CheckCollisionPointRec(mouse_position, hover_panel) && IsCursorOnScreen()) {
         icon_color = RAYWHITE;
 
         std::string info{};
@@ -5172,6 +5248,7 @@ void FileZeroDataCheck(const std::filesystem::path& filename)
         if (file >> token) {
             if (token == "0") {
                 zero_data = true; // Set zero_data to false if value is not 0
+                start_at_zero_still_valid = true;
             }
         }
         file.close();
