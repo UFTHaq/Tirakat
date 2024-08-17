@@ -59,7 +59,7 @@ Windows Release Version 2.0.0
 
 ### Known Issues / Bugs:
 - The window startup is broken when using 2 monitors in extended mode,
-- at least in my setup (laptop + second monitor). This could be a Raylib or Windows issue.
+- at least in my setup (laptop ryzen5 Win11 + second monitor). This could be a Raylib or Windows issue.
 
 ### Next Possible Features:
 - Save / Download Spectrogram Image of Music.
